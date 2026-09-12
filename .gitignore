@@ -43,3 +43,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# GeneraQR: uploaded PDFs, generated QR images and their manifest.
+# These persist on disk inside the project (never lost between restarts)
+# but are user-generated content, so they aren't tracked in git.
+/apps/web/public/uploads/
+/apps/web/data/
