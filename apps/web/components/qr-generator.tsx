@@ -1,5 +1,6 @@
 "use client"
 
+import Image from "next/image"
 import {
   useEffect,
   useRef,
@@ -10,7 +11,6 @@ import {
 import {
   CheckIcon,
   CloudUploadIcon,
-  EyeIcon,
   FileWarningIcon,
   ImageIcon,
   LinkIcon,
@@ -45,6 +45,7 @@ import {
   AttachmentDescription,
   AttachmentMedia,
   AttachmentTitle,
+  AttachmentTrigger,
 } from "@workspace/ui/components/attachment"
 import { Button, buttonVariants } from "@workspace/ui/components/button"
 import {
@@ -621,130 +622,136 @@ export function QrGenerator() {
             <Skeleton className="h-16 w-full rounded-xl" />
           </div>
         ) : records.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            No hay ningún PDF cargado todavía. Los que subas arriba aparecerán
-            aquí.
-          </p>
+          <div className="flex flex-col items-center gap-3 py-4 text-center">
+            <Image
+              src="/illustrations/empty-cabinet.jpg"
+              alt=""
+              width={806}
+              height={806}
+              className="h-auto w-36 dark:invert"
+            />
+            <p className="text-sm text-muted-foreground">
+              No hay ningún PDF cargado todavía. Los que subas arriba aparecerán
+              aquí.
+            </p>
+          </div>
         ) : (
           <div className="flex flex-col gap-3">
             {records.map((record) => (
-              <Attachment key={record.id} state="done" className="w-full">
-                <AttachmentMedia className={SOFT_GREEN_ICON_CLASS}>
-                  <QrCodeIcon />
-                </AttachmentMedia>
-                <AttachmentContent>
-                  <AttachmentTitle title={record.originalName}>
-                    {record.originalName}
-                  </AttachmentTitle>
-                  <div className="flex min-w-0 items-center gap-1.5">
-                    <AttachmentDescription className="flex-1 truncate">
-                      {formatSize(record.size)} · {formatDate(record.createdAt)}{" "}
-                      ·{" "}
-                      <Badge className="size-4 shrink-0 justify-center rounded-full border-none bg-green-600/10 p-0 align-middle text-green-600 focus-visible:ring-green-600/20 focus-visible:outline-none dark:bg-green-400/10 dark:text-green-400 dark:focus-visible:ring-green-400/40 [a]:hover:bg-green-600/5 dark:[a]:hover:bg-green-400/5">
-                        <CheckIcon />
-                        <span className="sr-only">Completado</span>
-                      </Badge>
-                    </AttachmentDescription>
+              <Dialog key={record.id}>
+                <Attachment state="done" className="w-full">
+                  <AttachmentMedia className={SOFT_GREEN_ICON_CLASS}>
+                    <QrCodeIcon />
+                  </AttachmentMedia>
+                  <AttachmentContent>
+                    <AttachmentTitle title={record.originalName}>
+                      {record.originalName}
+                    </AttachmentTitle>
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      <AttachmentDescription className="flex-1 truncate">
+                        {formatSize(record.size)} ·{" "}
+                        {formatDate(record.createdAt)} ·{" "}
+                        <Badge className="size-4 shrink-0 justify-center rounded-full border-none bg-green-600/10 p-0 align-middle text-green-600 focus-visible:ring-green-600/20 focus-visible:outline-none dark:bg-green-400/10 dark:text-green-400 dark:focus-visible:ring-green-400/40 [a]:hover:bg-green-600/5 dark:[a]:hover:bg-green-400/5">
+                          <CheckIcon />
+                          <span className="sr-only">Completado</span>
+                        </Badge>
+                      </AttachmentDescription>
+                    </div>
+                  </AttachmentContent>
+                  <AttachmentActions>
+                    <AlertDialog>
+                      <AlertDialogTrigger
+                        render={
+                          <AttachmentAction
+                            aria-label={`Eliminar ${record.originalName}`}
+                            disabled={deletingIds.has(record.id)}
+                            variant="destructive"
+                          />
+                        }
+                      >
+                        {deletingIds.has(record.id) ? (
+                          <Spinner />
+                        ) : (
+                          <Trash2Icon />
+                        )}
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>
+                            ¿Eliminar este PDF?
+                          </AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Se eliminará &quot;{record.originalName}&quot; junto
+                            con su código QR de forma permanente. Esta acción no
+                            se puede deshacer.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                          <AlertDialogAction
+                            variant="destructive"
+                            onClick={() => void handleDelete(record)}
+                          >
+                            Eliminar
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </AttachmentActions>
+                  <DialogTrigger
+                    render={
+                      <AttachmentTrigger
+                        aria-label={`Ver código QR de ${record.originalName}`}
+                      />
+                    }
+                  />
+                </Attachment>
+                <DialogContent className="sm:max-w-sm">
+                  <DialogHeader>
+                    <DialogTitle>{record.originalName}</DialogTitle>
+                    <DialogDescription>
+                      {formatSize(record.size)} · Subido el{" "}
+                      {formatDate(record.createdAt)}
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="flex justify-center py-2">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={record.qrPath}
+                      alt={`Código QR de ${record.originalName}`}
+                      width={224}
+                      height={224}
+                      className="size-56 rounded-lg border border-border"
+                    />
                   </div>
-                </AttachmentContent>
-                <AttachmentActions>
-                  <Dialog>
-                    <DialogTrigger
-                      render={
-                        <AttachmentAction
-                          aria-label={`Ver código QR de ${record.originalName}`}
-                        />
-                      }
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => void shareQrImage(record)}
+                  >
+                    <ImageIcon />
+                    Compartir imagen
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => void sharePdfLink(record)}
+                  >
+                    <LinkIcon />
+                    Compartir enlace
+                  </Button>
+                  <DialogFooter className="flex-wrap">
+                    <a
+                      href={record.pdfPath}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={cn(buttonVariants(), SOFT_GREEN_BUTTON_CLASS)}
                     >
-                      <EyeIcon />
-                    </DialogTrigger>
-                    <DialogContent className="sm:max-w-sm">
-                      <DialogHeader>
-                        <DialogTitle>{record.originalName}</DialogTitle>
-                        <DialogDescription>
-                          {formatSize(record.size)} · Subido el{" "}
-                          {formatDate(record.createdAt)}
-                        </DialogDescription>
-                      </DialogHeader>
-                      <div className="flex justify-center py-2">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={record.qrPath}
-                          alt={`Código QR de ${record.originalName}`}
-                          width={224}
-                          height={224}
-                          className="size-56 rounded-lg border border-border"
-                        />
-                      </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => void shareQrImage(record)}
-                      >
-                        <ImageIcon />
-                        Compartir imagen
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => void sharePdfLink(record)}
-                      >
-                        <LinkIcon />
-                        Compartir enlace
-                      </Button>
-                      <DialogFooter className="flex-wrap">
-                        <a
-                          href={record.pdfPath}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className={cn(
-                            buttonVariants(),
-                            SOFT_GREEN_BUTTON_CLASS
-                          )}
-                        >
-                          Abrir PDF
-                        </a>
-                      </DialogFooter>
-                    </DialogContent>
-                  </Dialog>
-                  <AlertDialog>
-                    <AlertDialogTrigger
-                      render={
-                        <AttachmentAction
-                          aria-label={`Eliminar ${record.originalName}`}
-                          disabled={deletingIds.has(record.id)}
-                          variant="destructive"
-                        />
-                      }
-                    >
-                      {deletingIds.has(record.id) ? (
-                        <Spinner />
-                      ) : (
-                        <Trash2Icon />
-                      )}
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>¿Eliminar este PDF?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          Se eliminará &quot;{record.originalName}&quot; junto
-                          con su código QR de forma permanente. Esta acción no
-                          se puede deshacer.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                        <AlertDialogAction
-                          variant="destructive"
-                          onClick={() => void handleDelete(record)}
-                        >
-                          Eliminar
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                </AttachmentActions>
-              </Attachment>
+                      Abrir PDF
+                    </a>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             ))}
           </div>
         )}
