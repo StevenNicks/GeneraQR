@@ -1,5 +1,4 @@
-import { promises as fs } from "fs"
-import path from "path"
+import { head, put } from "@vercel/blob"
 
 export type PdfRecord = {
   id: string
@@ -10,47 +9,36 @@ export type PdfRecord = {
   createdAt: string
 }
 
-const DATA_DIR = path.join(process.cwd(), "data")
-const MANIFEST_PATH = path.join(DATA_DIR, "pdfs.json")
-const PUBLIC_DIR = path.join(process.cwd(), "public")
+const MANIFEST_KEY = "data/pdfs.json"
 
-export const PDF_DIR = path.join(PUBLIC_DIR, "uploads", "pdfs")
-export const QR_DIR = path.join(PUBLIC_DIR, "uploads", "qrcodes")
-
-async function ensureDirs() {
-  await Promise.all([
-    fs.mkdir(DATA_DIR, { recursive: true }),
-    fs.mkdir(PDF_DIR, { recursive: true }),
-    fs.mkdir(QR_DIR, { recursive: true }),
-  ])
-}
+export const PDF_PREFIX = "uploads/pdfs/"
+export const QR_PREFIX = "uploads/qrcodes/"
 
 export async function readManifest(): Promise<PdfRecord[]> {
-  await ensureDirs()
-
   try {
-    const raw = await fs.readFile(MANIFEST_PATH, "utf-8")
-    return JSON.parse(raw) as PdfRecord[]
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return []
-    }
-    throw error
+    const blob = await head(MANIFEST_KEY)
+    const res = await fetch(blob.url, { cache: "no-store" })
+    if (!res.ok) return []
+    return (await res.json()) as PdfRecord[]
+  } catch {
+    return []
   }
 }
 
 export async function persistManifest(records: PdfRecord[]): Promise<void> {
-  // Write to a temp file and rename over the manifest so a reader never
-  // observes a partially-written file, then rename is atomic.
-  const tmpPath = path.join(DATA_DIR, `.pdfs.${process.pid}.${Date.now()}.tmp`)
-  await fs.writeFile(tmpPath, JSON.stringify(records, null, 2), "utf-8")
-  await fs.rename(tmpPath, MANIFEST_PATH)
+  await put(MANIFEST_KEY, JSON.stringify(records, null, 2), {
+    access: "public",
+    addRandomSuffix: false,
+    allowOverwrite: true,
+    contentType: "application/json",
+  })
 }
 
-// Every mutation that touches the manifest or the upload directories (saving
-// a new PDF, picking its on-disk filename, deleting one) runs through this
-// queue so concurrent requests never interleave their reads/writes and
-// corrupt the manifest or collide on a filename.
+// Every mutation that touches the manifest or the upload files (saving a new
+// PDF, picking its blob key, deleting one) runs through this queue so
+// concurrent requests within the same function instance never interleave
+// their reads/writes and corrupt the manifest or collide on a filename.
+// Note: this only guards a single serverless instance — see resolveUniqueBaseName.
 let writeQueue: Promise<unknown> = Promise.resolve()
 
 export function withUploadLock<T>(task: () => Promise<T>): Promise<T> {
@@ -77,7 +65,7 @@ export function removeFromManifest(id: string): Promise<PdfRecord | null> {
 
 const RESERVED_WINDOWS_NAMES = /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/i
 
-// Turns the uploaded file's own name into a safe on-disk base name (no
+// Turns the uploaded file's own name into a safe blob key base name (no
 // extension) so the saved PDF and its QR share the name the user recognizes,
 // instead of an opaque id.
 export function sanitizeFileBaseName(originalName: string): string {
@@ -97,9 +85,9 @@ export function sanitizeFileBaseName(originalName: string): string {
   return cleaned
 }
 
-async function pathExists(target: string): Promise<boolean> {
+async function blobExists(key: string): Promise<boolean> {
   try {
-    await fs.access(target)
+    await head(key)
     return true
   } catch {
     return false
@@ -107,15 +95,16 @@ async function pathExists(target: string): Promise<boolean> {
 }
 
 // Appends " (1)", " (2)", ... until the name doesn't collide with an
-// existing PDF or QR file. Must be called from inside withUploadLock so two
-// concurrent uploads with the same original name can't pick the same slot.
+// existing PDF or QR blob. Must be called from inside withUploadLock so two
+// concurrent uploads (within the same function instance) with the same
+// original name can't pick the same slot.
 export async function resolveUniqueBaseName(baseName: string): Promise<string> {
   let candidate = baseName
   let attempt = 1
 
   while (
-    (await pathExists(path.join(PDF_DIR, `${candidate}.pdf`))) ||
-    (await pathExists(path.join(QR_DIR, `${candidate}.png`)))
+    (await blobExists(`${PDF_PREFIX}${candidate}.pdf`)) ||
+    (await blobExists(`${QR_PREFIX}${candidate}.png`))
   ) {
     candidate = `${baseName} (${attempt})`
     attempt += 1

@@ -1,12 +1,11 @@
 import { randomUUID } from "crypto"
-import { promises as fs } from "fs"
-import path from "path"
 
+import { put } from "@vercel/blob"
 import QRCode from "qrcode"
 
 import {
-  PDF_DIR,
-  QR_DIR,
+  PDF_PREFIX,
+  QR_PREFIX,
   type PdfRecord,
   persistManifest,
   readManifest,
@@ -71,22 +70,28 @@ export async function POST(request: Request) {
       sanitizeFileBaseName(file.name)
     )
 
-    await fs.writeFile(path.join(PDF_DIR, `${baseName}.pdf`), bytes)
+    const pdfBlob = await put(`${PDF_PREFIX}${baseName}.pdf`, bytes, {
+      access: "public",
+      addRandomSuffix: false,
+      contentType: "application/pdf",
+    })
 
-    const pdfPath = `/uploads/pdfs/${baseName}.pdf`
-    const pdfUrl = new URL(pdfPath, request.url).toString()
-    const qrPath = `/uploads/qrcodes/${baseName}.png`
-
-    await QRCode.toFile(path.join(QR_DIR, `${baseName}.png`), pdfUrl, {
+    const qrBuffer = await QRCode.toBuffer(pdfBlob.url, {
       width: 512,
       margin: 1,
+    })
+
+    const qrBlob = await put(`${QR_PREFIX}${baseName}.png`, qrBuffer, {
+      access: "public",
+      addRandomSuffix: false,
+      contentType: "image/png",
     })
 
     const newRecord: PdfRecord = {
       id: randomUUID(),
       originalName: file.name,
-      pdfPath,
-      qrPath,
+      pdfPath: pdfBlob.url,
+      qrPath: qrBlob.url,
       size: file.size,
       createdAt: new Date().toISOString(),
     }
