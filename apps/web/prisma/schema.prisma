@@ -1,0 +1,20 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model PdfRecord {
+  id           String   @id @default(uuid())
+  originalName String
+  pdfPath      String
+  qrPath       String
+  size         Int
+  createdAt    DateTime @default(now())
+
+  @@map("pdf_records")
+}

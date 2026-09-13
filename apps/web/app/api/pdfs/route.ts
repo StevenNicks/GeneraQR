@@ -1,5 +1,3 @@
-import { randomUUID } from "crypto"
-
 import { put } from "@vercel/blob"
 import QRCode from "qrcode"
 
@@ -7,7 +5,7 @@ import {
   PDF_PREFIX,
   QR_PREFIX,
   type PdfRecord,
-  persistManifest,
+  createRecord,
   readManifest,
   resolveUniqueBaseName,
   sanitizeFileBaseName,
@@ -87,19 +85,12 @@ export async function POST(request: Request) {
       contentType: "image/png",
     })
 
-    const newRecord: PdfRecord = {
-      id: randomUUID(),
+    return createRecord({
       originalName: file.name,
       pdfPath: pdfBlob.url,
       qrPath: qrBlob.url,
       size: file.size,
-      createdAt: new Date().toISOString(),
-    }
-
-    const records = await readManifest()
-    await persistManifest([newRecord, ...records])
-
-    return newRecord
+    })
   })
 
   return Response.json(record, { status: 201 })

@@ -1,4 +1,6 @@
-import { head, put } from "@vercel/blob"
+import { head } from "@vercel/blob"
+
+import { prisma } from "@/lib/prisma"
 
 export type PdfRecord = {
   id: string
@@ -9,36 +11,46 @@ export type PdfRecord = {
   createdAt: string
 }
 
-const MANIFEST_KEY = "data/pdfs.json"
-
 export const PDF_PREFIX = "uploads/pdfs/"
 export const QR_PREFIX = "uploads/qrcodes/"
 
+function toPdfRecord(row: {
+  id: string
+  originalName: string
+  pdfPath: string
+  qrPath: string
+  size: number
+  createdAt: Date
+}): PdfRecord {
+  return { ...row, createdAt: row.createdAt.toISOString() }
+}
+
 export async function readManifest(): Promise<PdfRecord[]> {
+  const rows = await prisma.pdfRecord.findMany({
+    orderBy: { createdAt: "desc" },
+  })
+  return rows.map(toPdfRecord)
+}
+
+export async function createRecord(
+  data: Omit<PdfRecord, "id" | "createdAt">
+): Promise<PdfRecord> {
+  const row = await prisma.pdfRecord.create({ data })
+  return toPdfRecord(row)
+}
+
+export async function removeRecord(id: string): Promise<PdfRecord | null> {
   try {
-    const blob = await head(MANIFEST_KEY)
-    const res = await fetch(blob.url, { cache: "no-store" })
-    if (!res.ok) return []
-    return (await res.json()) as PdfRecord[]
+    const row = await prisma.pdfRecord.delete({ where: { id } })
+    return toPdfRecord(row)
   } catch {
-    return []
+    return null
   }
 }
 
-export async function persistManifest(records: PdfRecord[]): Promise<void> {
-  await put(MANIFEST_KEY, JSON.stringify(records, null, 2), {
-    access: "public",
-    addRandomSuffix: false,
-    allowOverwrite: true,
-    contentType: "application/json",
-  })
-}
-
-// Every mutation that touches the manifest or the upload files (saving a new
-// PDF, picking its blob key, deleting one) runs through this queue so
-// concurrent requests within the same function instance never interleave
-// their reads/writes and corrupt the manifest or collide on a filename.
-// Note: this only guards a single serverless instance — see resolveUniqueBaseName.
+// Resolving a free filename in Blob storage and creating the DB row must
+// happen as one step so two concurrent uploads (within the same function
+// instance) with the same original name never pick the same slot.
 let writeQueue: Promise<unknown> = Promise.resolve()
 
 export function withUploadLock<T>(task: () => Promise<T>): Promise<T> {
@@ -48,19 +60,6 @@ export function withUploadLock<T>(task: () => Promise<T>): Promise<T> {
     () => undefined
   )
   return result
-}
-
-export function removeFromManifest(id: string): Promise<PdfRecord | null> {
-  return withUploadLock(async () => {
-    const records = await readManifest()
-    const record = records.find((r) => r.id === id) ?? null
-    if (!record) {
-      return null
-    }
-    const next = records.filter((r) => r.id !== id)
-    await persistManifest(next)
-    return record
-  })
 }
 
 const RESERVED_WINDOWS_NAMES = /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/i

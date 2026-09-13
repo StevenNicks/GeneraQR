@@ -1,6 +1,6 @@
 import { del } from "@vercel/blob"
 
-import { removeFromManifest } from "@/lib/pdf-store"
+import { removeRecord } from "@/lib/pdf-store"
 
 export const runtime = "nodejs"
 
@@ -17,7 +17,7 @@ export async function DELETE(
     return Response.json({ error: "Identificador inválido." }, { status: 400 })
   }
 
-  const record = await removeFromManifest(id)
+  const record = await removeRecord(id)
 
   if (!record) {
     return Response.json({ error: "No se encontró el PDF." }, { status: 404 })

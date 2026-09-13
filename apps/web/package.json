@@ -9,10 +9,12 @@
     "start": "next start",
     "lint": "eslint",
     "format": "prettier --write \"**/*.{ts,tsx}\"",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "postinstall": "prisma generate"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
+    "@prisma/client": "^6.19.3",
     "@vercel/blob": "^2.8.0",
     "@workspace/ui": "*",
     "cn": "^0.2.6",
@@ -32,6 +34,7 @@
     "@workspace/eslint-config": "*",
     "@workspace/typescript-config": "*",
     "eslint": "^9",
+    "prisma": "^6.19.3",
     "typescript": "^5"
   }
 }
