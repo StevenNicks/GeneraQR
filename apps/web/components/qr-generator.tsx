@@ -11,12 +11,16 @@ import {
 import {
   CheckIcon,
   CloudUploadIcon,
+  CopyIcon,
+  FileTextIcon,
   FileWarningIcon,
   ImageIcon,
   LinkIcon,
+  MailIcon,
+  MessageCircleIcon,
   QrCodeIcon,
   RefreshCwIcon,
-  Trash2Icon,
+  SendIcon,
   XIcon,
 } from "lucide-react"
 
@@ -108,6 +112,34 @@ const SOFT_GREEN_ICON_CLASS =
 const SOFT_GREEN_BUTTON_CLASS =
   "border-transparent bg-green-600/10 text-green-600 hover:bg-green-600/20 focus-visible:border-green-600/40 focus-visible:ring-green-600/20 dark:bg-green-400/10 dark:text-green-400 dark:hover:bg-green-400/20 dark:focus-visible:ring-green-400/40"
 
+// Fallback "send to" targets shown when the native share sheet
+// (navigator.share) isn't available — e.g. desktop browsers, or any
+// non-secure origin such as the LAN IP used to scan QRs from a phone.
+const SHARE_APPS: {
+  label: string
+  icon: typeof MessageCircleIcon
+  getHref: (url: string, title: string) => string
+}[] = [
+  {
+    label: "WhatsApp",
+    icon: MessageCircleIcon,
+    getHref: (url, title) =>
+      `https://wa.me/?text=${encodeURIComponent(`${title} ${url}`)}`,
+  },
+  {
+    label: "Telegram",
+    icon: SendIcon,
+    getHref: (url, title) =>
+      `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(title)}`,
+  },
+  {
+    label: "Correo",
+    icon: MailIcon,
+    getHref: (url, title) =>
+      `mailto:?subject=${encodeURIComponent(title)}&body=${encodeURIComponent(url)}`,
+  },
+]
+
 const MAX_SIZE_BYTES = 25 * 1024 * 1024
 // Uploads on a fast local network finish almost instantly, which makes the
 // progress animation barely visible. Stretch every upload to at least this
@@ -129,6 +161,15 @@ function formatDate(iso: string) {
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function generateId() {
+  // crypto.randomUUID is only exposed in secure contexts (HTTPS/localhost),
+  // so it's unavailable when the app is opened over HTTP via the LAN IP.
+  if (typeof crypto !== "undefined" && crypto.randomUUID) {
+    return crypto.randomUUID()
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
 }
 
 function validateFile(file: File): { message: string } | null {
@@ -267,11 +308,18 @@ async function runUpload(
   }
 }
 
+type ShareTarget = {
+  kind: "link" | "image"
+  url: string
+  title: string
+}
+
 // Shares the PDF's own view URL — the same destination the QR encodes.
-// `navigator.share({ url })` works with any share target without needing a
-// camera. On desktop, where Web Share often isn't available at all, copying
-// the link is the expected equivalent.
-async function sharePdfLink(record: PdfRecord) {
+// `navigator.share({ url })` opens the OS-native "send to" sheet. Where that
+// isn't available (desktop browsers, or any non-secure origin such as the
+// LAN IP), `onFallback` opens our own share sheet instead of silently
+// copying or downloading.
+async function sharePdfLink(record: PdfRecord, onFallback: (target: ShareTarget) => void) {
   const url = new URL(record.pdfPath, window.location.origin).toString()
 
   if (navigator.share) {
@@ -281,53 +329,45 @@ async function sharePdfLink(record: PdfRecord) {
         text: `Código QR de ${record.originalName}`,
         url,
       })
+      return
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") return
-      toast.add({ title: "No se pudo compartir el enlace", type: "error" })
     }
-    return
   }
 
-  try {
-    await navigator.clipboard.writeText(url)
-    toast.add({ title: "Enlace copiado al portapapeles", type: "success" })
-  } catch {
-    toast.add({ title: "No se pudo copiar el enlace", type: "error" })
-  }
+  onFallback({ kind: "link", url, title: record.originalName })
 }
 
 // Shares the QR PNG itself (e.g. to forward for someone else to scan). Falls
-// back to downloading it when file-sharing isn't supported.
-async function shareQrImage(record: PdfRecord) {
-  try {
-    const response = await fetch(record.qrPath)
-    const blob = await response.blob()
-    const file = new File(
-      [blob],
-      `qr-${record.originalName.replace(/\.pdf$/i, "")}.png`,
-      { type: blob.type || "image/png" }
-    )
+// back to our own share sheet (pointed at the image URL) instead of
+// triggering a download when native file-sharing isn't supported.
+async function shareQrImage(record: PdfRecord, onFallback: (target: ShareTarget) => void) {
+  const url = new URL(record.qrPath, window.location.origin).toString()
 
-    if (navigator.canShare?.({ files: [file] })) {
-      await navigator.share({
-        files: [file],
-        title: record.originalName,
-        text: `Código QR de ${record.originalName}`,
-      })
-      return
+  if (navigator.share) {
+    try {
+      const response = await fetch(record.qrPath)
+      const blob = await response.blob()
+      const file = new File(
+        [blob],
+        `qr-${record.originalName.replace(/\.pdf$/i, "")}.png`,
+        { type: blob.type || "image/png" }
+      )
+
+      if (navigator.canShare?.({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: record.originalName,
+          text: `Código QR de ${record.originalName}`,
+        })
+        return
+      }
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") return
     }
-
-    const link = document.createElement("a")
-    link.href = record.qrPath
-    link.download = `qr-${record.originalName.replace(/\.pdf$/i, "")}.png`
-    document.body.appendChild(link)
-    link.click()
-    link.remove()
-    toast.add({ title: "Código QR descargado", type: "success" })
-  } catch (err) {
-    if (err instanceof DOMException && err.name === "AbortError") return
-    toast.add({ title: "No se pudo compartir el código QR", type: "error" })
   }
+
+  onFallback({ kind: "image", url, title: record.originalName })
 }
 
 export function QrGenerator() {
@@ -338,6 +378,7 @@ export function QrGenerator() {
 
   const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([])
   const [isDraggingOver, setIsDraggingOver] = useState(false)
+  const [shareTarget, setShareTarget] = useState<ShareTarget | null>(null)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const pendingUploadsRef = useRef<PendingUpload[]>([])
@@ -363,7 +404,7 @@ export function QrGenerator() {
   }, [])
 
   function addPendingUpload(file: File) {
-    const id = crypto.randomUUID()
+    const id = generateId()
     const validation = validateFile(file)
 
     if (validation) {
@@ -534,77 +575,90 @@ export function QrGenerator() {
             />
           </div>
 
-          {pendingUploads.map((upload) => (
-            <Attachment
-              key={upload.id}
-              state={upload.state.phase}
-              className="w-full"
-            >
-              <AttachmentMedia
-                className={
-                  upload.state.phase === "error"
-                    ? "bg-destructive/10 text-destructive"
-                    : undefined
-                }
+          {pendingUploads.map((upload) => {
+            const pct =
+              upload.state.phase === "uploading" && upload.state.total > 0
+                ? Math.round((upload.state.loaded / upload.state.total) * 100)
+                : null
+
+            return (
+              <Attachment
+                key={upload.id}
+                state={upload.state.phase}
+                className="w-full"
               >
-                {upload.state.phase === "uploading" ? (
-                  <Spinner />
-                ) : (
-                  <FileWarningIcon />
-                )}
-              </AttachmentMedia>
-              <AttachmentContent>
-                <AttachmentTitle>{upload.file.name}</AttachmentTitle>
-                <AttachmentDescription>
-                  {upload.state.phase === "uploading"
-                    ? `${formatSize(upload.state.loaded)} de ${formatSize(upload.state.total)} · Subiendo...`
-                    : upload.state.message}
-                </AttachmentDescription>
-                {upload.state.phase === "uploading" ? (
-                  <Progress
-                    value={
-                      upload.state.total > 0
-                        ? Math.round(
-                            (upload.state.loaded / upload.state.total) * 100
-                          )
-                        : null
-                    }
-                    className="mt-1"
-                  />
-                ) : null}
-              </AttachmentContent>
-              <AttachmentActions>
-                {upload.state.phase === "uploading" ? (
-                  <AttachmentAction
-                    type="button"
-                    aria-label={`Cancelar subida de ${upload.file.name}`}
-                    onClick={() => upload.controller?.abort()}
-                  >
-                    <XIcon />
-                  </AttachmentAction>
-                ) : (
-                  <>
-                    {upload.state.canRetry ? (
-                      <AttachmentAction
-                        type="button"
-                        aria-label={`Reintentar subida de ${upload.file.name}`}
-                        onClick={() => retryUpload(upload)}
-                      >
-                        <RefreshCwIcon />
-                      </AttachmentAction>
-                    ) : null}
+                <AttachmentMedia
+                  className={
+                    upload.state.phase === "error"
+                      ? "bg-destructive/10 text-destructive"
+                      : "bg-red-500/10 text-red-600 dark:bg-red-400/10 dark:text-red-400"
+                  }
+                >
+                  {upload.state.phase === "error" ? (
+                    <FileWarningIcon />
+                  ) : (
+                    <FileTextIcon />
+                  )}
+                </AttachmentMedia>
+                <AttachmentContent>
+                  <AttachmentTitle>{upload.file.name}</AttachmentTitle>
+                  <AttachmentDescription>
+                    {upload.state.phase === "uploading" ? (
+                      <>
+                        {formatSize(upload.state.loaded)} de{" "}
+                        {formatSize(upload.state.total)}
+                        {" · "}
+                        <span className="inline-flex items-center gap-1 align-middle">
+                          <Spinner className="size-3" />
+                          Subiendo...
+                        </span>
+                      </>
+                    ) : (
+                      upload.state.message
+                    )}
+                  </AttachmentDescription>
+                  {upload.state.phase === "uploading" ? (
+                    <div className="mt-1.5 flex items-center gap-2">
+                      <Progress value={pct} className="flex-1" />
+                      <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
+                        {pct ?? 0}%
+                      </span>
+                    </div>
+                  ) : null}
+                </AttachmentContent>
+                <AttachmentActions>
+                  {upload.state.phase === "uploading" ? (
                     <AttachmentAction
                       type="button"
-                      aria-label={`Quitar ${upload.file.name}`}
-                      onClick={() => removePendingUpload(upload)}
+                      aria-label={`Cancelar subida de ${upload.file.name}`}
+                      onClick={() => upload.controller?.abort()}
                     >
                       <XIcon />
                     </AttachmentAction>
-                  </>
-                )}
-              </AttachmentActions>
-            </Attachment>
-          ))}
+                  ) : (
+                    <>
+                      {upload.state.canRetry ? (
+                        <AttachmentAction
+                          type="button"
+                          aria-label={`Reintentar subida de ${upload.file.name}`}
+                          onClick={() => retryUpload(upload)}
+                        >
+                          <RefreshCwIcon />
+                        </AttachmentAction>
+                      ) : null}
+                      <AttachmentAction
+                        type="button"
+                        aria-label={`Quitar ${upload.file.name}`}
+                        onClick={() => removePendingUpload(upload)}
+                      >
+                        <XIcon />
+                      </AttachmentAction>
+                    </>
+                  )}
+                </AttachmentActions>
+              </Attachment>
+            )
+          })}
         </CardContent>
       </Card>
 
@@ -622,18 +676,21 @@ export function QrGenerator() {
             <Skeleton className="h-16 w-full rounded-xl" />
           </div>
         ) : records.length === 0 ? (
-          <div className="flex flex-col items-center gap-3 py-4 text-center">
+          <div className="flex flex-col items-center gap-3 px-6 py-8 text-center">
             <Image
-              src="/illustrations/empty-cabinet.jpg"
+              src="/illustrations/empty-cabinet.png"
               alt=""
-              width={806}
-              height={806}
-              className="h-auto w-36 dark:invert"
+              width={1254}
+              height={1254}
+              className="h-auto w-56 dark:invert"
+              priority
             />
-            <p className="text-sm text-muted-foreground">
-              No hay ningún PDF cargado todavía. Los que subas arriba aparecerán
-              aquí.
-            </p>
+            <div className="flex flex-col gap-1">
+              <p className="text-sm font-medium">Sin PDFs por ahora</p>
+              <p className="text-sm text-muted-foreground">
+                Los archivos que subas arriba aparecerán aquí.
+              </p>
+            </div>
           </div>
         ) : (
           <div className="flex flex-col gap-3">
@@ -666,13 +723,14 @@ export function QrGenerator() {
                             aria-label={`Eliminar ${record.originalName}`}
                             disabled={deletingIds.has(record.id)}
                             variant="destructive"
+                            size="icon-sm"
                           />
                         }
                       >
                         {deletingIds.has(record.id) ? (
                           <Spinner />
                         ) : (
-                          <Trash2Icon />
+                          <XIcon />
                         )}
                       </AlertDialogTrigger>
                       <AlertDialogContent>
@@ -727,7 +785,7 @@ export function QrGenerator() {
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={() => void shareQrImage(record)}
+                    onClick={() => void shareQrImage(record, setShareTarget)}
                   >
                     <ImageIcon />
                     Compartir imagen
@@ -735,7 +793,7 @@ export function QrGenerator() {
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={() => void sharePdfLink(record)}
+                    onClick={() => void sharePdfLink(record, setShareTarget)}
                   >
                     <LinkIcon />
                     Compartir enlace
@@ -756,6 +814,70 @@ export function QrGenerator() {
           </div>
         )}
       </div>
+
+      <Dialog
+        open={shareTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setShareTarget(null)
+        }}
+      >
+        <DialogContent className="sm:max-w-xs">
+          <DialogHeader>
+            <DialogTitle>
+              Compartir {shareTarget?.kind === "image" ? "imagen" : "enlace"}
+            </DialogTitle>
+            <DialogDescription>{shareTarget?.title}</DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-4 gap-2">
+            {SHARE_APPS.map((app) => (
+              <button
+                key={app.label}
+                type="button"
+                className="flex flex-col items-center gap-1.5 rounded-lg p-2 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                onClick={() => {
+                  if (!shareTarget) return
+                  window.open(
+                    app.getHref(shareTarget.url, shareTarget.title),
+                    "_blank",
+                    "noopener,noreferrer"
+                  )
+                  setShareTarget(null)
+                }}
+              >
+                <span className="flex size-11 items-center justify-center rounded-full bg-muted [&_svg]:size-5">
+                  <app.icon />
+                </span>
+                {app.label}
+              </button>
+            ))}
+            <button
+              type="button"
+              className="flex flex-col items-center gap-1.5 rounded-lg p-2 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              onClick={async () => {
+                if (!shareTarget) return
+                try {
+                  await navigator.clipboard.writeText(shareTarget.url)
+                  toast.add({
+                    title: "Enlace copiado al portapapeles",
+                    type: "success",
+                  })
+                } catch {
+                  toast.add({
+                    title: "No se pudo copiar el enlace",
+                    type: "error",
+                  })
+                }
+                setShareTarget(null)
+              }}
+            >
+              <span className="flex size-11 items-center justify-center rounded-full bg-muted [&_svg]:size-5">
+                <CopyIcon />
+              </span>
+              Copiar
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

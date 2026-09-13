@@ -5,7 +5,7 @@ const nextConfig: NextConfig = {
   // Next.js blocks dev-server requests (JS/CSS chunks, HMR, etc.) whose
   // Origin isn't localhost. Without this, opening the app from the LAN IP
   // (needed to scan a generated QR from a phone) loads a broken shell.
-  allowedDevOrigins: ["192.168.3.70", "192.168.3.*"],
+  allowedDevOrigins: ["192.168.3.70", "192.168.3.*", "192.168.1.3", "192.168.1.*"],
 }
 
 export default nextConfig
