@@ -560,8 +560,7 @@ export function QrGenerator() {
             <div>
               <CardTitle className="text-xl sm:text-2xl">GeneraQR</CardTitle>
               <CardDescription>
-                Genera un código QR por cada PDF que subas — solo PDF, hasta
-                25MB cada uno y puedes elegir varios a la vez.
+                Solo PDF, hasta 25MB cada uno y puedes elegir varios a la vez.
               </CardDescription>
             </div>
           </div>
@@ -616,69 +615,75 @@ export function QrGenerator() {
             />
           </div>
 
-          {pendingUploads.map((upload) => {
-            return (
-              <Attachment
-                key={upload.id}
-                state={upload.state.phase}
-                className="w-full"
-              >
-                <AttachmentMedia
-                  className={
-                    upload.state.phase === "error"
-                      ? "bg-destructive/10 text-destructive"
-                      : "bg-secondary text-secondary-foreground"
-                  }
-                >
-                  {upload.state.phase === "error" ? (
-                    <FileWarningIcon />
-                  ) : (
-                    <FadeArc className="size-6 text-green-600 dark:text-green-400" />
-                  )}
-                </AttachmentMedia>
-                <AttachmentContent>
-                  <AttachmentTitle title={upload.file.name}>
-                    {truncateFileName(upload.file.name)}
-                  </AttachmentTitle>
-                  <AttachmentDescription>
-                    {upload.state.phase === "uploading"
-                      ? `${formatSize(upload.state.loaded)} de ${formatSize(upload.state.total)}`
-                      : upload.state.message}
-                  </AttachmentDescription>
-                </AttachmentContent>
-                <AttachmentActions>
-                  {upload.state.phase === "uploading" ? (
-                    <AttachmentAction
-                      type="button"
-                      aria-label={`Cancelar subida de ${upload.file.name}`}
-                      onClick={() => upload.controller?.abort()}
+          {pendingUploads.length > 0 ? (
+            <ScrollArea className="-mr-3 max-h-[58px] pr-3">
+              <div className="flex flex-col gap-4">
+                {pendingUploads.map((upload) => {
+                  return (
+                    <Attachment
+                      key={upload.id}
+                      state={upload.state.phase}
+                      className="w-full"
                     >
-                      <XIcon />
-                    </AttachmentAction>
-                  ) : (
-                    <>
-                      {upload.state.canRetry ? (
-                        <AttachmentAction
-                          type="button"
-                          aria-label={`Reintentar subida de ${upload.file.name}`}
-                          onClick={() => retryUpload(upload)}
-                        >
-                          <RefreshCwIcon />
-                        </AttachmentAction>
-                      ) : null}
-                      <AttachmentAction
-                        type="button"
-                        aria-label={`Quitar ${upload.file.name}`}
-                        onClick={() => removePendingUpload(upload)}
+                      <AttachmentMedia
+                        className={
+                          upload.state.phase === "error"
+                            ? "bg-destructive/10 text-destructive"
+                            : "bg-secondary text-secondary-foreground"
+                        }
                       >
-                        <XIcon />
-                      </AttachmentAction>
-                    </>
-                  )}
-                </AttachmentActions>
-              </Attachment>
-            )
-          })}
+                        {upload.state.phase === "error" ? (
+                          <FileWarningIcon />
+                        ) : (
+                          <FadeArc className="size-6 text-green-600 dark:text-green-400" />
+                        )}
+                      </AttachmentMedia>
+                      <AttachmentContent>
+                        <AttachmentTitle title={upload.file.name}>
+                          {truncateFileName(upload.file.name)}
+                        </AttachmentTitle>
+                        <AttachmentDescription>
+                          {upload.state.phase === "uploading"
+                            ? `${formatSize(upload.state.loaded)} de ${formatSize(upload.state.total)}`
+                            : upload.state.message}
+                        </AttachmentDescription>
+                      </AttachmentContent>
+                      <AttachmentActions>
+                        {upload.state.phase === "uploading" ? (
+                          <AttachmentAction
+                            type="button"
+                            aria-label={`Cancelar subida de ${upload.file.name}`}
+                            onClick={() => upload.controller?.abort()}
+                          >
+                            <XIcon />
+                          </AttachmentAction>
+                        ) : (
+                          <>
+                            {upload.state.canRetry ? (
+                              <AttachmentAction
+                                type="button"
+                                aria-label={`Reintentar subida de ${upload.file.name}`}
+                                onClick={() => retryUpload(upload)}
+                              >
+                                <RefreshCwIcon />
+                              </AttachmentAction>
+                            ) : null}
+                            <AttachmentAction
+                              type="button"
+                              aria-label={`Quitar ${upload.file.name}`}
+                              onClick={() => removePendingUpload(upload)}
+                            >
+                              <XIcon />
+                            </AttachmentAction>
+                          </>
+                        )}
+                      </AttachmentActions>
+                    </Attachment>
+                  )
+                })}
+              </div>
+            </ScrollArea>
+          ) : null}
         </CardContent>
       </Card>
 
