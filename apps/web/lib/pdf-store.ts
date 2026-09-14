@@ -1,7 +1,5 @@
 import { randomBytes } from "node:crypto"
 
-import { head } from "@vercel/blob"
-
 import { prisma } from "@/lib/prisma"
 
 export type PdfRecord = {
@@ -79,9 +77,9 @@ export async function removeRecord(id: string): Promise<PdfRecord | null> {
   }
 }
 
-// Resolving a free filename in Blob storage and creating the DB row must
-// happen as one step so two concurrent uploads (within the same function
-// instance) with the same original name never pick the same slot.
+// Resolving a unique short id and creating the DB row must happen as one
+// step so two concurrent uploads (within the same function instance) never
+// pick the same one.
 let writeQueue: Promise<unknown> = Promise.resolve()
 
 export function withUploadLock<T>(task: () => Promise<T>): Promise<T> {
@@ -115,30 +113,3 @@ export function sanitizeFileBaseName(originalName: string): string {
   return cleaned
 }
 
-async function blobExists(key: string): Promise<boolean> {
-  try {
-    await head(key)
-    return true
-  } catch {
-    return false
-  }
-}
-
-// Appends " (1)", " (2)", ... until the name doesn't collide with an
-// existing PDF or QR blob. Must be called from inside withUploadLock so two
-// concurrent uploads (within the same function instance) with the same
-// original name can't pick the same slot.
-export async function resolveUniqueBaseName(baseName: string): Promise<string> {
-  let candidate = baseName
-  let attempt = 1
-
-  while (
-    (await blobExists(`${PDF_PREFIX}${candidate}.pdf`)) ||
-    (await blobExists(`${QR_PREFIX}${candidate}.png`))
-  ) {
-    candidate = `${baseName} (${attempt})`
-    attempt += 1
-  }
-
-  return candidate
-}

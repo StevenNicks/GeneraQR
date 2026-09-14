@@ -6,7 +6,6 @@ import {
   type PdfRecord,
   createRecord,
   readManifest,
-  resolveUniqueBaseName,
   resolveUniqueShortId,
   sanitizeFileBaseName,
   withUploadLock,
@@ -68,17 +67,20 @@ export async function POST(request: Request) {
   // working for whoever scans it.
   const origin = new URL(request.url).origin
 
-  // Resolving a free filename and writing both files must happen as one
-  // atomic step so two concurrent uploads with the same name never collide.
+  // Resolving the short id and creating the DB row must happen as one
+  // atomic step so two concurrent uploads never pick the same one.
   const record = await withUploadLock(async (): Promise<PdfRecord> => {
-    const baseName = await resolveUniqueBaseName(
-      sanitizeFileBaseName(file.name)
-    )
+    const baseName = sanitizeFileBaseName(file.name)
     const shortId = await resolveUniqueShortId()
 
+    // `addRandomSuffix: true` guarantees a fresh URL on every upload, even
+    // when re-uploading a file with the same name right after deleting the
+    // old one — without it, the new file would land at the exact same Blob
+    // URL, and the CDN (which treats Blob URLs as immutable) would keep
+    // serving the deleted file's cached bytes instead of the new content.
     const pdfBlob = await put(`${PDF_PREFIX}${baseName}.pdf`, bytes, {
       access: "public",
-      addRandomSuffix: false,
+      addRandomSuffix: true,
       contentType: "application/pdf",
     })
 
@@ -86,7 +88,7 @@ export async function POST(request: Request) {
 
     const qrBlob = await put(`${QR_PREFIX}${baseName}.png`, qrBuffer, {
       access: "public",
-      addRandomSuffix: false,
+      addRandomSuffix: true,
       contentType: "image/png",
     })
 
