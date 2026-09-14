@@ -336,7 +336,7 @@ function QrImage({ src, alt }: { src: string; alt: string }) {
   }, [src])
 
   return (
-    <div className="relative flex size-56 items-center justify-center rounded-lg border border-border">
+    <div className="relative flex size-56 items-center justify-center rounded-[12%] border border-border">
       {!failed ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
@@ -345,10 +345,7 @@ function QrImage({ src, alt }: { src: string; alt: string }) {
           alt={alt}
           width={224}
           height={224}
-          className={cn(
-            "size-56 rounded-lg object-contain",
-            !loaded && "invisible"
-          )}
+          className={cn("size-56 object-contain", !loaded && "invisible")}
           onLoad={() => setLoaded(true)}
           onError={() => {
             if (attempt < QR_IMAGE_RETRY_DELAYS_MS.length) {
@@ -368,7 +365,7 @@ function QrImage({ src, alt }: { src: string; alt: string }) {
         </span>
       )}
       {!failed && !loaded ? (
-        <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-card">
+        <div className="absolute inset-0 flex items-center justify-center rounded-[12%] bg-card">
           <Spinner />
         </div>
       ) : null}
