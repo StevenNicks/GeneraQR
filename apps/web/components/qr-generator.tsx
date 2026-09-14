@@ -81,6 +81,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@workspace/ui/components/empty"
+import { ScrollArea } from "@workspace/ui/components/scroll-area"
 import { Skeleton } from "@workspace/ui/components/skeleton"
 import { Spinner } from "@workspace/ui/components/spinner"
 import { toast } from "sonner"
@@ -552,25 +553,21 @@ export function QrGenerator() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-2xl flex-col gap-6 p-4 pb-12 sm:gap-8 sm:p-6 sm:pb-16">
-      <div className="flex items-start gap-3">
-        <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-secondary text-secondary-foreground">
-          <QrCodeIcon className="size-5" />
-        </div>
-        <div>
-          <h1 className="text-xl font-semibold sm:text-2xl">GeneraQR</h1>
-          <p className="text-sm text-muted-foreground">
-            Genera un código QR por cada PDF que subas. Nunca se pierden.
-          </p>
-        </div>
-      </div>
-
-      <Card>
+    <div className="mx-auto flex h-dvh w-full max-w-2xl flex-col gap-6 overflow-hidden p-4 sm:gap-8 sm:p-6">
+      <Card className="shrink-0">
         <CardHeader>
-          <CardTitle>Subir PDF</CardTitle>
-          <CardDescription>
-            Solo PDF, hasta 25MB cada uno. Puedes elegir varios a la vez.
-          </CardDescription>
+          <div className="flex items-start gap-3">
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-secondary text-secondary-foreground">
+              <QrCodeIcon className="size-5" />
+            </div>
+            <div>
+              <CardTitle className="text-xl sm:text-2xl">GeneraQR</CardTitle>
+              <CardDescription>
+                Genera un código QR por cada PDF que subas — solo PDF, hasta
+                25MB cada uno y puedes elegir varios a la vez.
+              </CardDescription>
+            </div>
+          </div>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <div
@@ -688,11 +685,11 @@ export function QrGenerator() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
+      <Card className="min-h-0 flex-1">
+        <CardHeader className="shrink-0">
           <CardTitle>PDFs guardados</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex min-h-0 flex-1 flex-col">
           {listError ? (
             <Alert variant="destructive">
               <AlertTitle>Ocurrió un problema</AlertTitle>
@@ -716,147 +713,156 @@ export function QrGenerator() {
               </EmptyHeader>
             </Empty>
           ) : (
-            <div className="flex flex-col gap-3">
-              {records.map((record) => {
-                // Bottom sheet on phones, centered dialog from tablet up —
-                // same content either way, just a different shell.
-                const Root = isDesktop ? Dialog : Drawer
-                const Trigger = isDesktop ? DialogTrigger : DrawerTrigger
-                const Content = isDesktop ? DialogContent : DrawerContent
-                const Header = isDesktop ? DialogHeader : DrawerHeader
-                const Title = isDesktop ? DialogTitle : DrawerTitle
-                const Description = isDesktop
-                  ? DialogDescription
-                  : DrawerDescription
-                const Footer = isDesktop ? DialogFooter : DrawerFooter
-                const Close = isDesktop ? DialogClose : DrawerClose
+            <ScrollArea className="-mr-3 min-h-0 flex-1 pr-3">
+              <div className="flex flex-col gap-3">
+                {records.map((record) => {
+                  // Bottom sheet on phones, centered dialog from tablet up —
+                  // same content either way, just a different shell.
+                  const Root = isDesktop ? Dialog : Drawer
+                  const Trigger = isDesktop ? DialogTrigger : DrawerTrigger
+                  const Content = isDesktop ? DialogContent : DrawerContent
+                  const Header = isDesktop ? DialogHeader : DrawerHeader
+                  const Title = isDesktop ? DialogTitle : DrawerTitle
+                  const Description = isDesktop
+                    ? DialogDescription
+                    : DrawerDescription
+                  const Footer = isDesktop ? DialogFooter : DrawerFooter
+                  const Close = isDesktop ? DialogClose : DrawerClose
 
-                return (
-                  <Root
-                    key={record.id}
-                    {...(!isDesktop ? { showSwipeHandle: true } : {})}
-                  >
-                    <Attachment state="done" className="w-full">
-                      <AttachmentMedia className="bg-secondary text-secondary-foreground">
-                        <PDF className="size-5" />
-                      </AttachmentMedia>
-                      <AttachmentContent>
-                        <AttachmentTitle title={record.originalName}>
-                          {truncateFileName(record.originalName)}
-                        </AttachmentTitle>
-                        <div className="flex min-w-0 items-center gap-1.5">
-                          <AttachmentDescription className="flex-1 shrink-0 truncate">
-                            {formatSize(record.size)} ·{" "}
-                            {formatDate(record.createdAt)}
-                          </AttachmentDescription>
-                        </div>
-                      </AttachmentContent>
-                      <AttachmentActions>
-                        <AttachmentAction
-                          type="button"
-                          aria-label={`Eliminar ${record.originalName}`}
-                          disabled={deletingIds.has(record.id)}
-                          onClick={() => setDeleteTarget(record)}
-                        >
-                          {deletingIds.has(record.id) ? <FadeArc /> : <XIcon />}
-                        </AttachmentAction>
-                      </AttachmentActions>
-                      <Trigger
-                        render={
-                          <AttachmentTrigger
-                            aria-label={`Ver código QR de ${record.originalName}`}
-                          />
-                        }
-                      />
-                    </Attachment>
-                    <Content
-                      className={isDesktop ? undefined : "min-h-[75dvh]"}
-                      {...(isDesktop ? { showCloseButton: false } : {})}
+                  return (
+                    <Root
+                      key={record.id}
+                      {...(!isDesktop ? { showSwipeHandle: true } : {})}
                     >
-                      <Close
-                        render={
-                          <Button
+                      <Attachment state="done" className="w-full">
+                        <AttachmentMedia className="bg-secondary text-secondary-foreground">
+                          <PDF className="size-5" />
+                        </AttachmentMedia>
+                        <AttachmentContent>
+                          <AttachmentTitle title={record.originalName}>
+                            {truncateFileName(record.originalName)}
+                          </AttachmentTitle>
+                          <div className="flex min-w-0 items-center gap-1.5">
+                            <AttachmentDescription className="flex-1 shrink-0 truncate">
+                              {formatSize(record.size)} ·{" "}
+                              {formatDate(record.createdAt)}
+                            </AttachmentDescription>
+                          </div>
+                        </AttachmentContent>
+                        <AttachmentActions>
+                          <AttachmentAction
                             type="button"
-                            variant="ghost"
-                            size="icon-sm"
-                            className="absolute top-3 right-3"
-                          />
-                        }
-                      >
-                        <XIcon />
-                        <span className="sr-only">Cerrar</span>
-                      </Close>
-                      <Header>
-                        <Title title={record.originalName} className="truncate">
-                          {truncateFileName(record.originalName, 30)}
-                        </Title>
-                        <Description>
-                          {formatSize(record.size)} · Subido el{" "}
-                          {formatDate(record.createdAt)}
-                        </Description>
-                      </Header>
-                      <div
-                        className={cn(
-                          "flex flex-col items-center gap-2",
-                          isDesktop ? "py-2" : "flex-1 justify-center py-6"
-                        )}
-                      >
-                        <QrImage
-                          src={record.qrPath}
-                          alt={`Código QR de ${record.originalName}`}
+                            aria-label={`Eliminar ${record.originalName}`}
+                            disabled={deletingIds.has(record.id)}
+                            onClick={() => setDeleteTarget(record)}
+                          >
+                            {deletingIds.has(record.id) ? (
+                              <FadeArc />
+                            ) : (
+                              <XIcon />
+                            )}
+                          </AttachmentAction>
+                        </AttachmentActions>
+                        <Trigger
+                          render={
+                            <AttachmentTrigger
+                              aria-label={`Ver código QR de ${record.originalName}`}
+                            />
+                          }
                         />
-                      </div>
-                      <div className="flex flex-col gap-1.5 px-4 pb-4">
-                        <span className="text-xs font-medium text-muted-foreground">
-                          Enlace
-                        </span>
-                        <div className="flex items-center gap-1 rounded-lg border border-input bg-muted/40 py-1.5 pr-1.5 pl-3">
-                          <span className="flex-1 truncate text-xs text-muted-foreground">
-                            {`${window.location.origin}/r/${record.shortId}`}
-                          </span>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon-sm"
-                            aria-label="Compartir enlace"
-                            onClick={() =>
-                              void shareRecordUrl(
-                                `${window.location.origin}/r/${record.shortId}`,
-                                record.originalName
-                              )
-                            }
-                          >
-                            <LinkIcon />
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon-sm"
-                            aria-label="Compartir imagen del QR"
-                            onClick={() => void shareRecordQrImage(record)}
-                          >
-                            <QrCodeIcon />
-                          </Button>
-                        </div>
-                      </div>
-                      <Footer className={isDesktop ? undefined : "pb-6"}>
-                        <a
-                          href={record.pdfPath}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className={buttonVariants()}
+                      </Attachment>
+                      <Content
+                        className={isDesktop ? undefined : "min-h-[75dvh]"}
+                        {...(isDesktop ? { showCloseButton: false } : {})}
+                      >
+                        <Close
+                          render={
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon-sm"
+                              className="absolute top-3 right-3"
+                            />
+                          }
                         >
-                          Abrir PDF
-                        </a>
-                      </Footer>
-                    </Content>
-                  </Root>
-                )
-              })}
-            </div>
+                          <XIcon />
+                          <span className="sr-only">Cerrar</span>
+                        </Close>
+                        <Header>
+                          <Title
+                            title={record.originalName}
+                            className="truncate"
+                          >
+                            {truncateFileName(record.originalName, 30)}
+                          </Title>
+                          <Description>
+                            {formatSize(record.size)} · Subido el{" "}
+                            {formatDate(record.createdAt)}
+                          </Description>
+                        </Header>
+                        <div
+                          className={cn(
+                            "flex flex-col items-center gap-2",
+                            isDesktop ? "py-2" : "flex-1 justify-center py-6"
+                          )}
+                        >
+                          <QrImage
+                            src={record.qrPath}
+                            alt={`Código QR de ${record.originalName}`}
+                          />
+                        </div>
+                        <div className="flex flex-col gap-1.5 px-4 pb-4">
+                          <span className="text-xs font-medium text-muted-foreground">
+                            Enlace
+                          </span>
+                          <div className="flex items-center gap-1 rounded-lg border border-input bg-muted/40 py-1.5 pr-1.5 pl-3">
+                            <span className="flex-1 truncate text-xs text-muted-foreground">
+                              {`${window.location.origin}/r/${record.shortId}`}
+                            </span>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon-sm"
+                              aria-label="Compartir enlace"
+                              onClick={() =>
+                                void shareRecordUrl(
+                                  `${window.location.origin}/r/${record.shortId}`,
+                                  record.originalName
+                                )
+                              }
+                            >
+                              <LinkIcon />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon-sm"
+                              aria-label="Compartir imagen del QR"
+                              onClick={() => void shareRecordQrImage(record)}
+                            >
+                              <QrCodeIcon />
+                            </Button>
+                          </div>
+                        </div>
+                        <Footer className={isDesktop ? undefined : "pb-6"}>
+                          <a
+                            href={record.pdfPath}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={buttonVariants()}
+                          >
+                            Abrir PDF
+                          </a>
+                        </Footer>
+                      </Content>
+                    </Root>
+                  )
+                })}
+              </div>
+            </ScrollArea>
           )}
         </CardContent>
-        <CardFooter className="justify-end">
+        <CardFooter className="shrink-0 justify-end">
           <a
             href="mailto:stevealvaradopaez@gmail.com?subject=Ayuda%20con%20GeneraQR"
             className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
