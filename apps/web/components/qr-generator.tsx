@@ -13,11 +13,14 @@ import {
   CircleHelpIcon,
   FileWarningIcon,
   LinkIcon,
+  MoonIcon,
   QrCodeIcon,
   RefreshCwIcon,
+  SunIcon,
   Trash2Icon,
   XIcon,
 } from "lucide-react"
+import { useTheme } from "next-themes"
 
 import { PDF } from "@react-symbols/icons/files"
 import {
@@ -49,6 +52,7 @@ import {
 import { Button, buttonVariants } from "@workspace/ui/components/button"
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardFooter,
@@ -439,6 +443,13 @@ export function QrGenerator() {
   // page's responsive classes.
   const isDesktop = useMediaQuery("(min-width: 640px)")
 
+  const { resolvedTheme, setTheme } = useTheme()
+  // The server has no way to know the visitor's theme, so resolvedTheme is
+  // undefined until the client mounts — render a neutral icon until then to
+  // avoid a hydration mismatch.
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
+
   const fileInputRef = useRef<HTMLInputElement>(null)
   const pendingUploadsRef = useRef<PendingUpload[]>([])
 
@@ -621,6 +632,39 @@ export function QrGenerator() {
               </CardDescription>
             </div>
           </div>
+          <CardAction>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="relative"
+              aria-label={
+                mounted && resolvedTheme === "dark"
+                  ? "Cambiar a tema claro"
+                  : "Cambiar a tema oscuro"
+              }
+              onClick={() =>
+                setTheme(resolvedTheme === "dark" ? "light" : "dark")
+              }
+            >
+              <SunIcon
+                className={cn(
+                  "size-4 transition-all duration-500",
+                  mounted && resolvedTheme === "dark"
+                    ? "scale-100 rotate-0 opacity-100"
+                    : "scale-0 rotate-90 opacity-0"
+                )}
+              />
+              <MoonIcon
+                className={cn(
+                  "absolute size-4 transition-all duration-500",
+                  mounted && resolvedTheme === "dark"
+                    ? "scale-0 -rotate-90 opacity-0"
+                    : "scale-100 rotate-0 opacity-100"
+                )}
+              />
+            </Button>
+          </CardAction>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <div
