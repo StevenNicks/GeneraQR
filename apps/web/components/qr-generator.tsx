@@ -10,6 +10,7 @@ import {
 } from "react"
 import {
   CheckIcon,
+  CircleAlertIcon,
   CloudUploadIcon,
   CopyIcon,
   FileTextIcon,
@@ -32,6 +33,7 @@ import {
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
+  AlertDialogMedia,
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@workspace/ui/components/alert-dialog"
@@ -40,7 +42,6 @@ import {
   AlertDescription,
   AlertTitle,
 } from "@workspace/ui/components/alert"
-import { Badge } from "@workspace/ui/components/badge"
 import {
   Attachment,
   AttachmentAction,
@@ -81,6 +82,8 @@ import { Skeleton } from "@workspace/ui/components/skeleton"
 import { Spinner } from "@workspace/ui/components/spinner"
 import { toast } from "@workspace/ui/components/toast"
 import { cn } from "@workspace/ui/lib/utils"
+
+import { FadeArc } from "@/components/fade-arc"
 
 type PdfRecord = {
   id: string
@@ -312,6 +315,65 @@ type ShareTarget = {
   kind: "link" | "image"
   url: string
   title: string
+}
+
+const QR_IMAGE_RETRY_DELAYS_MS = [500, 1000, 2000, 3000]
+
+// Right after upload, the QR PNG can take a moment to become fetchable from
+// Vercel Blob's CDN. A plain <img> has no retry, so opening the dialog
+// immediately can show a broken image until the dialog is closed and
+// reopened (which remounts the element). Retry with backoff instead, and
+// show a spinner while waiting.
+function QrImage({ src, alt }: { src: string; alt: string }) {
+  const [attempt, setAttempt] = useState(0)
+  const [loaded, setLoaded] = useState(false)
+  const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    setAttempt(0)
+    setLoaded(false)
+    setFailed(false)
+  }, [src])
+
+  return (
+    <div className="relative flex size-56 items-center justify-center rounded-lg border border-border">
+      {!failed ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          key={attempt}
+          src={attempt === 0 ? src : `${src}?retry=${attempt}`}
+          alt={alt}
+          width={224}
+          height={224}
+          className={cn(
+            "size-56 rounded-lg object-contain",
+            !loaded && "invisible"
+          )}
+          onLoad={() => setLoaded(true)}
+          onError={() => {
+            if (attempt < QR_IMAGE_RETRY_DELAYS_MS.length) {
+              setTimeout(
+                () => setAttempt((prev) => prev + 1),
+                QR_IMAGE_RETRY_DELAYS_MS[attempt]
+              )
+            } else {
+              setFailed(true)
+            }
+          }}
+        />
+      ) : (
+        <span className="px-4 text-center text-xs text-muted-foreground">
+          No se pudo cargar el código QR. Cierra y vuelve a abrir para
+          reintentar.
+        </span>
+      )}
+      {!failed && !loaded ? (
+        <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-card">
+          <Spinner />
+        </div>
+      ) : null}
+    </div>
+  )
 }
 
 // Shares the PDF's own view URL — the same destination the QR encodes.
@@ -591,7 +653,7 @@ export function QrGenerator() {
                   className={
                     upload.state.phase === "error"
                       ? "bg-destructive/10 text-destructive"
-                      : "bg-red-500/10 text-red-600 dark:bg-red-400/10 dark:text-red-400"
+                      : "bg-secondary text-secondary-foreground"
                   }
                 >
                   {upload.state.phase === "error" ? (
@@ -609,7 +671,7 @@ export function QrGenerator() {
                         {formatSize(upload.state.total)}
                         {" · "}
                         <span className="inline-flex items-center gap-1 align-middle">
-                          <Spinner className="size-3" />
+                          <FadeArc className="size-3" />
                           Subiendo...
                         </span>
                       </>
@@ -705,13 +767,9 @@ export function QrGenerator() {
                       {record.originalName}
                     </AttachmentTitle>
                     <div className="flex min-w-0 items-center gap-1.5">
-                      <AttachmentDescription className="flex-1 truncate">
+                      <AttachmentDescription className="flex-1 truncate shrink-0">
                         {formatSize(record.size)} ·{" "}
-                        {formatDate(record.createdAt)} ·{" "}
-                        <Badge className="size-4 shrink-0 justify-center rounded-full border-none bg-green-600/10 p-0 align-middle text-green-600 focus-visible:ring-green-600/20 focus-visible:outline-none dark:bg-green-400/10 dark:text-green-400 dark:focus-visible:ring-green-400/40 [a]:hover:bg-green-600/5 dark:[a]:hover:bg-green-400/5">
-                          <CheckIcon />
-                          <span className="sr-only">Completado</span>
-                        </Badge>
+                        {formatDate(record.createdAt)}
                       </AttachmentDescription>
                     </div>
                   </AttachmentContent>
@@ -723,25 +781,32 @@ export function QrGenerator() {
                             aria-label={`Eliminar ${record.originalName}`}
                             disabled={deletingIds.has(record.id)}
                             variant="destructive"
-                            size="icon-sm"
+                            size="icon-xs"
+                            className="rounded-full"
                           />
                         }
                       >
                         {deletingIds.has(record.id) ? (
-                          <Spinner />
+                          <FadeArc />
                         ) : (
                           <XIcon />
                         )}
                       </AlertDialogTrigger>
                       <AlertDialogContent>
                         <AlertDialogHeader>
+                          <AlertDialogMedia className="rounded-full bg-destructive/10 dark:bg-destructive/10">
+                            <CircleAlertIcon className="size-5 text-destructive" />
+                          </AlertDialogMedia>
                           <AlertDialogTitle>
                             ¿Eliminar este PDF?
                           </AlertDialogTitle>
                           <AlertDialogDescription>
-                            Se eliminará &quot;{record.originalName}&quot; junto
-                            con su código QR de forma permanente. Esta acción no
-                            se puede deshacer.
+                            Se eliminará{" "}
+                            <span className="font-medium text-foreground">
+                              &quot;{record.originalName}&quot;
+                            </span>{" "}
+                            junto con su código QR de forma permanente. Esta
+                            acción no se puede deshacer.
                           </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
@@ -773,13 +838,9 @@ export function QrGenerator() {
                     </DialogDescription>
                   </DialogHeader>
                   <div className="flex justify-center py-2">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
+                    <QrImage
                       src={record.qrPath}
                       alt={`Código QR de ${record.originalName}`}
-                      width={224}
-                      height={224}
-                      className="size-56 rounded-lg border border-border"
                     />
                   </div>
                   <Button
