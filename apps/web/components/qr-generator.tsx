@@ -13,7 +13,6 @@ import {
   CircleAlertIcon,
   CloudUploadIcon,
   CopyIcon,
-  FileTextIcon,
   FileWarningIcon,
   ImageIcon,
   LinkIcon,
@@ -77,7 +76,6 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@workspace/ui/components/empty"
-import { Progress } from "@workspace/ui/components/progress"
 import { Skeleton } from "@workspace/ui/components/skeleton"
 import { Spinner } from "@workspace/ui/components/spinner"
 import { toast } from "@workspace/ui/components/toast"
@@ -638,11 +636,6 @@ export function QrGenerator() {
           </div>
 
           {pendingUploads.map((upload) => {
-            const pct =
-              upload.state.phase === "uploading" && upload.state.total > 0
-                ? Math.round((upload.state.loaded / upload.state.total) * 100)
-                : null
-
             return (
               <Attachment
                 key={upload.id}
@@ -659,34 +652,16 @@ export function QrGenerator() {
                   {upload.state.phase === "error" ? (
                     <FileWarningIcon />
                   ) : (
-                    <FileTextIcon />
+                    <FadeArc className="size-6 text-green-600 dark:text-green-400" />
                   )}
                 </AttachmentMedia>
                 <AttachmentContent>
                   <AttachmentTitle>{upload.file.name}</AttachmentTitle>
                   <AttachmentDescription>
-                    {upload.state.phase === "uploading" ? (
-                      <>
-                        {formatSize(upload.state.loaded)} de{" "}
-                        {formatSize(upload.state.total)}
-                        {" · "}
-                        <span className="inline-flex items-center gap-1 align-middle">
-                          <FadeArc className="size-3" />
-                          Subiendo...
-                        </span>
-                      </>
-                    ) : (
-                      upload.state.message
-                    )}
+                    {upload.state.phase === "uploading"
+                      ? `${formatSize(upload.state.loaded)} de ${formatSize(upload.state.total)}`
+                      : upload.state.message}
                   </AttachmentDescription>
-                  {upload.state.phase === "uploading" ? (
-                    <div className="mt-1.5 flex items-center gap-2">
-                      <Progress value={pct} className="flex-1" />
-                      <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
-                        {pct ?? 0}%
-                      </span>
-                    </div>
-                  ) : null}
                 </AttachmentContent>
                 <AttachmentActions>
                   {upload.state.phase === "uploading" ? (
