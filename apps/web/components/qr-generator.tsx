@@ -71,7 +71,7 @@ import {
 } from "@workspace/ui/components/empty"
 import { Skeleton } from "@workspace/ui/components/skeleton"
 import { Spinner } from "@workspace/ui/components/spinner"
-import { toast } from "@workspace/ui/components/toast"
+import { toast } from "sonner"
 import { cn } from "@workspace/ui/lib/utils"
 
 import { FadeArc } from "@/components/fade-arc"
@@ -255,6 +255,7 @@ async function runUpload(
     clearInterval(ticker)
     setRecords((prev) => [record, ...prev])
     setPendingUploads((prev) => prev.filter((upload) => upload.id !== id))
+    toast.success(`"${truncateFileName(record.originalName, 40)}" se subió`)
   } catch (err) {
     clearInterval(ticker)
     if (err instanceof DOMException && err.name === "AbortError") {
@@ -377,9 +378,9 @@ async function shareRecordUrl(url: string, title: string) {
 
   try {
     await navigator.clipboard.writeText(url)
-    toast.add({ title: "Enlace copiado al portapapeles", type: "success" })
+    toast.success("Enlace copiado al portapapeles")
   } catch {
-    toast.add({ title: "No se pudo copiar el enlace", type: "error" })
+    toast.error("No se pudo copiar el enlace")
   }
 }
 
@@ -519,8 +520,9 @@ export function QrGenerator() {
         throw new Error(data.error ?? "No se pudo eliminar el PDF.")
       }
       setRecords((prev) => prev.filter((r) => r.id !== record.id))
+      toast(`"${truncateFileName(record.originalName, 40)}" se eliminó`)
     } catch (err) {
-      setListError(
+      toast.error(
         err instanceof Error ? err.message : "No se pudo eliminar el PDF."
       )
     } finally {
@@ -533,7 +535,7 @@ export function QrGenerator() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-2xl flex-col gap-6 p-4 sm:gap-8 sm:p-6">
+    <div className="mx-auto flex w-full max-w-2xl flex-col gap-6 p-4 pb-12 sm:gap-8 sm:p-6 sm:pb-16">
       <div className="flex items-start gap-3">
         <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-secondary text-secondary-foreground">
           <QrCodeIcon className="size-5" />
@@ -700,7 +702,7 @@ export function QrGenerator() {
               <Drawer key={record.id} showSwipeHandle>
                 <Attachment state="done" className="w-full">
                   <AttachmentMedia className="bg-secondary text-secondary-foreground">
-                    <QrCodeIcon />
+                    <PDF className="size-5" />
                   </AttachmentMedia>
                   <AttachmentContent>
                     <AttachmentTitle title={record.originalName}>

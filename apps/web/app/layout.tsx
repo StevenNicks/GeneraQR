@@ -1,11 +1,11 @@
-import { Geist_Mono, Inter } from "next/font/google"
+import { Geist_Mono, Inter, Raleway } from "next/font/google"
 
 import "@workspace/ui/globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
-import { Toaster } from "@workspace/ui/components/toast"
+import { Toaster } from "@workspace/ui/components/sonner"
 import { cn } from "@workspace/ui/lib/utils"
 
-const inter = Inter({ subsets: ["latin"], variable: "--font-sans" })
+const raleway = Raleway({subsets:['latin'],variable:'--font-sans'})
 
 const fontMono = Geist_Mono({
   subsets: ["latin"],
@@ -25,12 +25,13 @@ export default function RootLayout({
         "antialiased",
         fontMono.variable,
         "font-sans",
-        inter.variable
+        raleway.variable
       )}
     >
       <body>
         <ThemeProvider>
-          <Toaster>{children}</Toaster>
+          {children}
+          <Toaster richColors />
         </ThemeProvider>
       </body>
     </html>
