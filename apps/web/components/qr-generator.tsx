@@ -1,6 +1,5 @@
 "use client"
 
-import Image from "next/image"
 import {
   useEffect,
   useRef,
@@ -9,19 +8,15 @@ import {
   type SetStateAction,
 } from "react"
 import {
-  CheckIcon,
   CircleAlertIcon,
-  CloudUploadIcon,
-  CopyIcon,
   FileWarningIcon,
-  MailIcon,
-  MessageCircleIcon,
+  LinkIcon,
   QrCodeIcon,
   RefreshCwIcon,
-  SendIcon,
   XIcon,
 } from "lucide-react"
 
+import { PDF } from "@react-symbols/icons/files"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -101,44 +96,6 @@ type PendingUpload = {
   controller: AbortController | null
   state: PendingUploadState
 }
-
-// Same soft-tint green as the "Completado" badge (literal green, not the
-// theme's --primary token) so every accented icon/button in this page reads
-// as one consistent color, mirroring the button's own built-in
-// "destructive" variant shape (bg-color/10 + text-color, no solid fill).
-const SOFT_GREEN_ICON_CLASS =
-  "bg-green-600/10 text-green-600 dark:bg-green-400/10 dark:text-green-400"
-
-const SOFT_GREEN_BUTTON_CLASS =
-  "border-transparent bg-green-600/10 text-green-600 hover:bg-green-600/20 focus-visible:border-green-600/40 focus-visible:ring-green-600/20 dark:bg-green-400/10 dark:text-green-400 dark:hover:bg-green-400/20 dark:focus-visible:ring-green-400/40"
-
-// Fallback "send to" targets shown when the native share sheet
-// (navigator.share) isn't available — e.g. desktop browsers, or any
-// non-secure origin such as the LAN IP used to scan QRs from a phone.
-const SHARE_APPS: {
-  label: string
-  icon: typeof MessageCircleIcon
-  getHref: (url: string, title: string) => string
-}[] = [
-  {
-    label: "WhatsApp",
-    icon: MessageCircleIcon,
-    getHref: (url, title) =>
-      `https://wa.me/?text=${encodeURIComponent(`${title} ${url}`)}`,
-  },
-  {
-    label: "Telegram",
-    icon: SendIcon,
-    getHref: (url, title) =>
-      `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(title)}`,
-  },
-  {
-    label: "Correo",
-    icon: MailIcon,
-    getHref: (url, title) =>
-      `mailto:?subject=${encodeURIComponent(title)}&body=${encodeURIComponent(url)}`,
-  },
-]
 
 const MAX_SIZE_BYTES = 25 * 1024 * 1024
 // Uploads on a fast local network finish almost instantly, which makes the
@@ -325,6 +282,26 @@ async function runUpload(
   }
 }
 
+// Stacked, fading file rows — echoes the app's own Attachment rows so the
+// empty state reads as "your files will look like this" rather than a
+// generic stock illustration.
+function StackedCardsIllustration() {
+  return (
+    <div className="relative h-24 w-52" aria-hidden="true">
+      <div className="bg-muted/60 dark:bg-muted/30 border-border/50 absolute inset-x-6 top-0 h-6 rounded-t-lg border" />
+      <div className="bg-muted/80 dark:bg-muted/50 border-border/60 absolute inset-x-3 top-3 h-6 rounded-t-lg border" />
+      <div className="bg-background border-border absolute inset-x-0 top-6 flex h-16 items-center gap-3 rounded-lg border px-4 shadow-sm">
+        <div className="bg-muted size-8 shrink-0 rounded" />
+        <div className="flex flex-1 flex-col gap-1.5">
+          <div className="bg-muted h-2.5 w-3/4 rounded" />
+          <div className="bg-muted/60 h-2 w-1/2 rounded" />
+        </div>
+      </div>
+      <div className="from-background/0 via-background/60 to-background pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-linear-to-b" />
+    </div>
+  )
+}
+
 const QR_IMAGE_RETRY_DELAYS_MS = [500, 1000, 2000, 3000]
 
 // Right after upload, the QR PNG can take a moment to become fetchable from
@@ -382,6 +359,54 @@ function QrImage({ src, alt }: { src: string; alt: string }) {
       ) : null}
     </div>
   )
+}
+
+// Shares the record's short link. `navigator.share({ url })` opens the
+// OS-native "send to" sheet on devices that support it; elsewhere (desktop
+// browsers, or a non-secure origin such as the LAN IP) it falls back to
+// copying the link to the clipboard.
+async function shareRecordUrl(url: string, title: string) {
+  if (navigator.share) {
+    try {
+      await navigator.share({ title, url })
+      return
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") return
+    }
+  }
+
+  try {
+    await navigator.clipboard.writeText(url)
+    toast.add({ title: "Enlace copiado al portapapeles", type: "success" })
+  } catch {
+    toast.add({ title: "No se pudo copiar el enlace", type: "error" })
+  }
+}
+
+// Shares the QR PNG itself (e.g. to forward for someone else to scan).
+// Falls back to opening the image in a new tab — from there it can be
+// long-pressed/saved — instead of silently doing nothing.
+async function shareRecordQrImage(record: PdfRecord) {
+  if (navigator.share) {
+    try {
+      const response = await fetch(record.qrPath)
+      const blob = await response.blob()
+      const file = new File(
+        [blob],
+        `qr-${record.originalName.replace(/\.pdf$/i, "")}.png`,
+        { type: blob.type || "image/png" }
+      )
+
+      if (navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ files: [file], title: record.originalName })
+        return
+      }
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") return
+    }
+  }
+
+  window.open(record.qrPath, "_blank", "noopener,noreferrer")
 }
 
 export function QrGenerator() {
@@ -510,19 +535,13 @@ export function QrGenerator() {
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-6 p-4 sm:gap-8 sm:p-6">
       <div className="flex items-start gap-3">
-        <div
-          className={cn(
-            "flex size-10 shrink-0 items-center justify-center rounded-xl",
-            SOFT_GREEN_ICON_CLASS
-          )}
-        >
+        <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-secondary text-secondary-foreground">
           <QrCodeIcon className="size-5" />
         </div>
         <div>
           <h1 className="text-xl font-semibold sm:text-2xl">GeneraQR</h1>
           <p className="text-sm text-muted-foreground">
-            Sube uno o varios PDF para generar sus códigos QR. Los archivos
-            quedan guardados en el proyecto, así nunca se pierden.
+            Genera un código QR por cada PDF que subas. Nunca se pierden.
           </p>
         </div>
       </div>
@@ -531,8 +550,7 @@ export function QrGenerator() {
         <CardHeader>
           <CardTitle>Subir PDF</CardTitle>
           <CardDescription>
-            Solo se aceptan archivos .pdf (máximo 25MB cada uno). Puedes
-            seleccionar varios a la vez.
+            Solo PDF, hasta 25MB cada uno. Puedes elegir varios a la vez.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
@@ -556,18 +574,14 @@ export function QrGenerator() {
               )}
             >
               <EmptyHeader>
-                <EmptyMedia variant="icon" className={SOFT_GREEN_ICON_CLASS}>
-                  <CloudUploadIcon />
+                <EmptyMedia>
+                  <PDF className="size-10" />
                 </EmptyMedia>
                 <EmptyTitle>Elige tus archivos o arrástralos aquí</EmptyTitle>
-                <EmptyDescription>
-                  Formato PDF, hasta 25MB cada uno.
-                </EmptyDescription>
               </EmptyHeader>
               <EmptyContent>
                 <Button
                   type="button"
-                  className={SOFT_GREEN_BUTTON_CLASS}
                   onClick={() => fileInputRef.current?.click()}
                 >
                   Buscar archivos
@@ -669,28 +683,23 @@ export function QrGenerator() {
             <Skeleton className="h-16 w-full rounded-xl" />
           </div>
         ) : records.length === 0 ? (
-          <div className="flex flex-col items-center gap-3 px-6 py-8 text-center">
-            <Image
-              src="/illustrations/empty-cabinet.png"
-              alt=""
-              width={1254}
-              height={1254}
-              className="h-auto w-56 dark:invert"
-              priority
-            />
-            <div className="flex flex-col gap-1">
-              <p className="text-sm font-medium">Sin PDFs por ahora</p>
-              <p className="text-sm text-muted-foreground">
+          <Empty className="py-12">
+            <EmptyHeader>
+              <EmptyMedia>
+                <StackedCardsIllustration />
+              </EmptyMedia>
+              <EmptyTitle>Sin PDFs por ahora</EmptyTitle>
+              <EmptyDescription>
                 Los archivos que subas arriba aparecerán aquí.
-              </p>
-            </div>
-          </div>
+              </EmptyDescription>
+            </EmptyHeader>
+          </Empty>
         ) : (
           <div className="flex flex-col gap-3">
             {records.map((record) => (
               <Drawer key={record.id} showSwipeHandle>
                 <Attachment state="done" className="w-full">
-                  <AttachmentMedia className={SOFT_GREEN_ICON_CLASS}>
+                  <AttachmentMedia className="bg-secondary text-secondary-foreground">
                     <QrCodeIcon />
                   </AttachmentMedia>
                   <AttachmentContent>
@@ -709,9 +718,6 @@ export function QrGenerator() {
                       type="button"
                       aria-label={`Eliminar ${record.originalName}`}
                       disabled={deletingIds.has(record.id)}
-                      variant="destructive"
-                      size="icon-xs"
-                      className="rounded-full"
                       onClick={() => setDeleteTarget(record)}
                     >
                       {deletingIds.has(record.id) ? <FadeArc /> : <XIcon />}
@@ -725,7 +731,7 @@ export function QrGenerator() {
                     }
                   />
                 </Attachment>
-                <DrawerContent>
+                <DrawerContent className="min-h-[75dvh]">
                   <DrawerClose
                     render={
                       <Button
@@ -748,77 +754,51 @@ export function QrGenerator() {
                       {formatDate(record.createdAt)}
                     </DrawerDescription>
                   </DrawerHeader>
-                  <div className="flex justify-center py-2">
+                  <div className="flex flex-1 flex-col items-center justify-center gap-2 py-6">
                     <QrImage
                       src={record.qrPath}
                       alt={`Código QR de ${record.originalName}`}
                     />
                   </div>
-                  <div className="flex flex-col gap-4 px-4 pb-2">
-                    <div className="flex justify-center gap-4">
-                      {SHARE_APPS.map((app) => {
-                        const shareUrl = `${window.location.origin}/r/${record.shortId}`
-                        return (
-                          <button
-                            key={app.label}
-                            type="button"
-                            onClick={() =>
-                              window.open(
-                                app.getHref(shareUrl, record.originalName),
-                                "_blank",
-                                "noopener,noreferrer"
-                              )
-                            }
-                            className="flex flex-col items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
-                          >
-                            <span className="flex size-11 items-center justify-center rounded-full bg-muted [&_svg]:size-5">
-                              <app.icon />
-                            </span>
-                            {app.label}
-                          </button>
-                        )
-                      })}
-                    </div>
-                    <div className="flex flex-col gap-1.5">
-                      <span className="text-xs font-medium text-muted-foreground">
-                        Enlace
+                  <div className="flex flex-col gap-1.5 px-4 pb-4">
+                    <span className="text-xs font-medium text-muted-foreground">
+                      Enlace
+                    </span>
+                    <div className="flex items-center gap-1 rounded-lg border border-input bg-muted/40 py-1.5 pr-1.5 pl-3">
+                      <span className="flex-1 truncate text-xs text-muted-foreground">
+                        {`${window.location.origin}/r/${record.shortId}`}
                       </span>
-                      <div className="flex items-center gap-2 rounded-lg border border-input bg-muted/40 py-1.5 pr-1.5 pl-3">
-                        <span className="flex-1 truncate text-xs text-muted-foreground">
-                          {`${window.location.origin}/r/${record.shortId}`}
-                        </span>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label="Copiar enlace"
-                          onClick={async () => {
-                            const shareUrl = `${window.location.origin}/r/${record.shortId}`
-                            try {
-                              await navigator.clipboard.writeText(shareUrl)
-                              toast.add({
-                                title: "Enlace copiado al portapapeles",
-                                type: "success",
-                              })
-                            } catch {
-                              toast.add({
-                                title: "No se pudo copiar el enlace",
-                                type: "error",
-                              })
-                            }
-                          }}
-                        >
-                          <CopyIcon />
-                        </Button>
-                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label="Compartir enlace"
+                        onClick={() =>
+                          void shareRecordUrl(
+                            `${window.location.origin}/r/${record.shortId}`,
+                            record.originalName
+                          )
+                        }
+                      >
+                        <LinkIcon />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label="Compartir imagen del QR"
+                        onClick={() => void shareRecordQrImage(record)}
+                      >
+                        <QrCodeIcon />
+                      </Button>
                     </div>
                   </div>
-                  <DrawerFooter>
+                  <DrawerFooter className="pb-6">
                     <a
                       href={record.pdfPath}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className={cn(buttonVariants(), SOFT_GREEN_BUTTON_CLASS)}
+                      className={buttonVariants()}
                     >
                       Abrir PDF
                     </a>

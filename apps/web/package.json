@@ -5,6 +5,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:https": "next dev --experimental-https --experimental-https-key .cert/localhost-key.pem --experimental-https-cert .cert/localhost.pem",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
@@ -15,6 +16,7 @@
   "dependencies": {
     "@base-ui/react": "^1.8.0",
     "@prisma/client": "^6.19.3",
+    "@react-symbols/icons": "^1.4.1",
     "@resvg/resvg-js": "^2.6.2",
     "@vercel/blob": "^2.8.0",
     "@workspace/ui": "*",
