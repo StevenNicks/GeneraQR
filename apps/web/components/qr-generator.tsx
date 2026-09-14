@@ -8,12 +8,14 @@ import {
   type SetStateAction,
 } from "react"
 import {
+  CheckIcon,
   CircleAlertIcon,
   CircleHelpIcon,
   FileWarningIcon,
   LinkIcon,
   QrCodeIcon,
   RefreshCwIcon,
+  Trash2Icon,
   XIcon,
 } from "lucide-react"
 
@@ -430,6 +432,8 @@ export function QrGenerator() {
   const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([])
   const [isDraggingOver, setIsDraggingOver] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<PdfRecord | null>(null)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
   // Bottom sheet on phones, centered dialog from tablet up — matches
   // Tailwind's own `sm` breakpoint so it lines up with the rest of the
   // page's responsive classes.
@@ -549,6 +553,59 @@ export function QrGenerator() {
     }
   }
 
+  function toggleSelected(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
+      return next
+    })
+  }
+
+  async function handleBulkDelete(ids: string[]) {
+    setDeletingIds((prev) => {
+      const next = new Set(prev)
+      ids.forEach((id) => next.add(id))
+      return next
+    })
+
+    const results = await Promise.allSettled(
+      ids.map((id) => fetch(`/api/pdfs/${id}`, { method: "DELETE" }))
+    )
+
+    const deletedIds = ids.filter((_, index) => {
+      const result = results[index]
+      return result?.status === "fulfilled" && result.value.ok
+    })
+    const failedCount = ids.length - deletedIds.length
+
+    setRecords((prev) => prev.filter((r) => !deletedIds.includes(r.id)))
+    setDeletingIds((prev) => {
+      const next = new Set(prev)
+      ids.forEach((id) => next.delete(id))
+      return next
+    })
+    setSelectedIds(new Set())
+
+    if (deletedIds.length > 0) {
+      toast(
+        deletedIds.length === 1
+          ? "1 PDF se eliminó"
+          : `${deletedIds.length} PDFs se eliminaron`
+      )
+    }
+    if (failedCount > 0) {
+      toast.error(
+        failedCount === 1
+          ? "No se pudo eliminar 1 PDF."
+          : `No se pudieron eliminar ${failedCount} PDFs.`
+      )
+    }
+  }
+
   return (
     <div className="mx-auto flex h-dvh w-full max-w-2xl flex-col gap-6 overflow-hidden p-4 sm:gap-8 sm:p-6">
       <Card className="shrink-0">
@@ -617,7 +674,7 @@ export function QrGenerator() {
 
           {pendingUploads.length > 0 ? (
             <ScrollArea className="-mr-3 max-h-[58px] pr-3">
-              <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-4 p-0.5">
                 {pendingUploads.map((upload) => {
                   return (
                     <Attachment
@@ -689,7 +746,36 @@ export function QrGenerator() {
 
       <Card className="min-h-0">
         <CardHeader className="shrink-0">
-          <CardTitle>PDFs guardados</CardTitle>
+          {selectedIds.size > 0 ? (
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="Cancelar selección"
+                  onClick={() => setSelectedIds(new Set())}
+                >
+                  <XIcon />
+                </Button>
+                <CardTitle>
+                  {selectedIds.size}{" "}
+                  {selectedIds.size === 1 ? "seleccionado" : "seleccionados"}
+                </CardTitle>
+              </div>
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                onClick={() => setBulkDeleteOpen(true)}
+              >
+                <Trash2Icon />
+                Eliminar
+              </Button>
+            </div>
+          ) : (
+            <CardTitle>PDFs guardados</CardTitle>
+          )}
         </CardHeader>
         <CardContent className="flex min-h-0 flex-1 flex-col">
           {listError ? (
@@ -716,7 +802,7 @@ export function QrGenerator() {
             </Empty>
           ) : (
             <ScrollArea className="-mr-3 min-h-0 flex-1 pr-3">
-              <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-3 p-0.5">
                 {records.map((record) => {
                   // Bottom sheet on phones, centered dialog from tablet up —
                   // same content either way, just a different shell.
@@ -731,15 +817,54 @@ export function QrGenerator() {
                   const Footer = isDesktop ? DialogFooter : DrawerFooter
                   const Close = isDesktop ? DialogClose : DrawerClose
 
+                  const isSelected = selectedIds.has(record.id)
+                  const isSelectionMode = selectedIds.size > 0
+
                   return (
                     <Root
                       key={record.id}
                       {...(!isDesktop ? { showSwipeHandle: true } : {})}
                     >
-                      <Attachment state="done" className="w-full">
-                        <AttachmentMedia className="bg-secondary text-secondary-foreground">
-                          <PDF className="size-5" />
-                        </AttachmentMedia>
+                      <Attachment
+                        state="done"
+                        className={cn(
+                          "w-full",
+                          isSelected && "border-primary/50 bg-primary/5"
+                        )}
+                      >
+                        <div className="relative z-20 shrink-0">
+                          <AttachmentMedia
+                            role="button"
+                            tabIndex={0}
+                            aria-pressed={isSelected}
+                            aria-label={
+                              isSelected
+                                ? `Deseleccionar ${record.originalName}`
+                                : `Seleccionar ${record.originalName}`
+                            }
+                            className={cn(
+                              "cursor-pointer bg-secondary text-secondary-foreground transition-opacity",
+                              isSelected && "opacity-50"
+                            )}
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              toggleSelected(record.id)
+                            }}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter" || event.key === " ") {
+                                event.preventDefault()
+                                toggleSelected(record.id)
+                              }
+                            }}
+                          >
+                            <PDF className="size-5" />
+                          </AttachmentMedia>
+                          {isSelected ? (
+                            <span className="pointer-events-none absolute -right-1 -bottom-1 flex size-4 items-center justify-center rounded-full bg-primary text-primary-foreground ring-2 ring-card">
+                              <CheckIcon className="size-2.5" />
+                            </span>
+                          ) : null}
+                        </div>
                         <AttachmentContent>
                           <AttachmentTitle title={record.originalName}>
                             {truncateFileName(record.originalName)}
@@ -751,27 +876,42 @@ export function QrGenerator() {
                             </AttachmentDescription>
                           </div>
                         </AttachmentContent>
-                        <AttachmentActions>
-                          <AttachmentAction
+                        {!isSelectionMode ? (
+                          <AttachmentActions>
+                            <AttachmentAction
+                              type="button"
+                              aria-label={`Eliminar ${record.originalName}`}
+                              disabled={deletingIds.has(record.id)}
+                              onClick={() => setDeleteTarget(record)}
+                            >
+                              {deletingIds.has(record.id) ? (
+                                <FadeArc />
+                              ) : (
+                                <XIcon />
+                              )}
+                            </AttachmentAction>
+                          </AttachmentActions>
+                        ) : null}
+                        {isSelectionMode ? (
+                          <button
                             type="button"
-                            aria-label={`Eliminar ${record.originalName}`}
-                            disabled={deletingIds.has(record.id)}
-                            onClick={() => setDeleteTarget(record)}
-                          >
-                            {deletingIds.has(record.id) ? (
-                              <FadeArc />
-                            ) : (
-                              <XIcon />
-                            )}
-                          </AttachmentAction>
-                        </AttachmentActions>
-                        <Trigger
-                          render={
-                            <AttachmentTrigger
-                              aria-label={`Ver código QR de ${record.originalName}`}
-                            />
-                          }
-                        />
+                            className="absolute inset-0 z-10 outline-none"
+                            aria-label={
+                              isSelected
+                                ? `Deseleccionar ${record.originalName}`
+                                : `Seleccionar ${record.originalName}`
+                            }
+                            onClick={() => toggleSelected(record.id)}
+                          />
+                        ) : (
+                          <Trigger
+                            render={
+                              <AttachmentTrigger
+                                aria-label={`Ver código QR de ${record.originalName}`}
+                              />
+                            }
+                          />
+                        )}
                       </Attachment>
                       <Content
                         className={isDesktop ? undefined : "min-h-[75dvh]"}
@@ -903,6 +1043,40 @@ export function QrGenerator() {
               onClick={() => {
                 if (deleteTarget) void handleDelete(deleteTarget)
                 setDeleteTarget(null)
+              }}
+            >
+              Eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogMedia className="rounded-full bg-destructive/10 dark:bg-destructive/10">
+              <CircleAlertIcon className="size-5 text-destructive" />
+            </AlertDialogMedia>
+            <AlertDialogTitle>
+              ¿Eliminar {selectedIds.size}{" "}
+              {selectedIds.size === 1 ? "PDF" : "PDFs"}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Se{" "}
+              {selectedIds.size === 1
+                ? "eliminará el archivo seleccionado"
+                : "eliminarán los archivos seleccionados"}{" "}
+              junto con sus códigos QR de forma permanente. Esta acción no se
+              puede deshacer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() => {
+                void handleBulkDelete(Array.from(selectedIds))
+                setBulkDeleteOpen(false)
               }}
             >
               Eliminar
