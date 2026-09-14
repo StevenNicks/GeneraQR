@@ -1,9 +1,12 @@
+import { randomBytes } from "node:crypto"
+
 import { head } from "@vercel/blob"
 
 import { prisma } from "@/lib/prisma"
 
 export type PdfRecord = {
   id: string
+  shortId: string
   originalName: string
   pdfPath: string
   qrPath: string
@@ -16,6 +19,7 @@ export const QR_PREFIX = "uploads/qrcodes/"
 
 function toPdfRecord(row: {
   id: string
+  shortId: string
   originalName: string
   pdfPath: string
   qrPath: string
@@ -30,6 +34,33 @@ export async function readManifest(): Promise<PdfRecord[]> {
     orderBy: { createdAt: "desc" },
   })
   return rows.map(toPdfRecord)
+}
+
+export async function findRecordByShortId(
+  shortId: string
+): Promise<PdfRecord | null> {
+  const row = await prisma.pdfRecord.findUnique({ where: { shortId } })
+  return row ? toPdfRecord(row) : null
+}
+
+// 6 random bytes as base64url is 8 URL-safe characters — short enough to
+// keep the QR's target URL (and so the QR itself) small, with a collision
+// space (2^48) large enough that resolveUniqueShortId only ever needs its
+// retry loop as a safety net, not in practice.
+function generateShortId(): string {
+  return randomBytes(6).toString("base64url")
+}
+
+export async function resolveUniqueShortId(): Promise<string> {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const candidate = generateShortId()
+    const existing = await prisma.pdfRecord.findUnique({
+      where: { shortId: candidate },
+      select: { id: true },
+    })
+    if (!existing) return candidate
+  }
+  throw new Error("No se pudo generar un identificador corto único.")
 }
 
 export async function createRecord(

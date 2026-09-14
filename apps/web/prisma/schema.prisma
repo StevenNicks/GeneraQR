@@ -10,6 +10,10 @@ datasource db {
 
 model PdfRecord {
   id           String   @id @default(uuid())
+  // Short slug used in the QR's target URL (/r/:shortId) instead of the
+  // full Blob URL, so the QR encodes far less data and can render as a
+  // simpler symbol.
+  shortId      String   @unique
   originalName String
   pdfPath      String
   qrPath       String

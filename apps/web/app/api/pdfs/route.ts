@@ -1,5 +1,4 @@
 import { put } from "@vercel/blob"
-import QRCode from "qrcode"
 
 import {
   PDF_PREFIX,
@@ -8,9 +7,11 @@ import {
   createRecord,
   readManifest,
   resolveUniqueBaseName,
+  resolveUniqueShortId,
   sanitizeFileBaseName,
   withUploadLock,
 } from "@/lib/pdf-store"
+import { renderStyledQrPng } from "@/lib/qr-style"
 
 export const runtime = "nodejs"
 
@@ -60,6 +61,12 @@ export async function POST(request: Request) {
   }
 
   const bytes = Buffer.from(await file.arrayBuffer())
+  // The QR encodes this app's own short redirect (see app/r/[shortId]),
+  // not the Blob URL directly — much shorter, so the QR itself renders as a
+  // simpler symbol. `request.url`'s origin matches however the app is being
+  // reached (localhost, LAN IP, or a real domain), so the link keeps
+  // working for whoever scans it.
+  const origin = new URL(request.url).origin
 
   // Resolving a free filename and writing both files must happen as one
   // atomic step so two concurrent uploads with the same name never collide.
@@ -67,6 +74,7 @@ export async function POST(request: Request) {
     const baseName = await resolveUniqueBaseName(
       sanitizeFileBaseName(file.name)
     )
+    const shortId = await resolveUniqueShortId()
 
     const pdfBlob = await put(`${PDF_PREFIX}${baseName}.pdf`, bytes, {
       access: "public",
@@ -74,10 +82,7 @@ export async function POST(request: Request) {
       contentType: "application/pdf",
     })
 
-    const qrBuffer = await QRCode.toBuffer(pdfBlob.url, {
-      width: 512,
-      margin: 1,
-    })
+    const qrBuffer = renderStyledQrPng(`${origin}/r/${shortId}`, 512)
 
     const qrBlob = await put(`${QR_PREFIX}${baseName}.png`, qrBuffer, {
       access: "public",
@@ -86,6 +91,7 @@ export async function POST(request: Request) {
     })
 
     return createRecord({
+      shortId,
       originalName: file.name,
       pdfPath: pdfBlob.url,
       qrPath: qrBlob.url,

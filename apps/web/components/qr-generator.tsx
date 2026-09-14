@@ -34,7 +34,6 @@ import {
   AlertDialogHeader,
   AlertDialogMedia,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@workspace/ui/components/alert-dialog"
 import {
   Alert,
@@ -439,6 +438,7 @@ export function QrGenerator() {
   const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([])
   const [isDraggingOver, setIsDraggingOver] = useState(false)
   const [shareTarget, setShareTarget] = useState<ShareTarget | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<PdfRecord | null>(null)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const pendingUploadsRef = useRef<PendingUpload[]>([])
@@ -749,52 +749,17 @@ export function QrGenerator() {
                     </div>
                   </AttachmentContent>
                   <AttachmentActions>
-                    <AlertDialog>
-                      <AlertDialogTrigger
-                        render={
-                          <AttachmentAction
-                            aria-label={`Eliminar ${record.originalName}`}
-                            disabled={deletingIds.has(record.id)}
-                            variant="destructive"
-                            size="icon-xs"
-                            className="rounded-full"
-                          />
-                        }
-                      >
-                        {deletingIds.has(record.id) ? (
-                          <FadeArc />
-                        ) : (
-                          <XIcon />
-                        )}
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogMedia className="rounded-full bg-destructive/10 dark:bg-destructive/10">
-                            <CircleAlertIcon className="size-5 text-destructive" />
-                          </AlertDialogMedia>
-                          <AlertDialogTitle>
-                            ¿Eliminar este PDF?
-                          </AlertDialogTitle>
-                          <AlertDialogDescription>
-                            Se eliminará{" "}
-                            <span className="font-medium text-foreground">
-                              &quot;{record.originalName}&quot;
-                            </span>{" "}
-                            junto con su código QR de forma permanente. Esta
-                            acción no se puede deshacer.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                          <AlertDialogAction
-                            variant="destructive"
-                            onClick={() => void handleDelete(record)}
-                          >
-                            Eliminar
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
+                    <AttachmentAction
+                      type="button"
+                      aria-label={`Eliminar ${record.originalName}`}
+                      disabled={deletingIds.has(record.id)}
+                      variant="destructive"
+                      size="icon-xs"
+                      className="rounded-full"
+                      onClick={() => setDeleteTarget(record)}
+                    >
+                      {deletingIds.has(record.id) ? <FadeArc /> : <XIcon />}
+                    </AttachmentAction>
                   </AttachmentActions>
                   <DialogTrigger
                     render={
@@ -850,6 +815,42 @@ export function QrGenerator() {
           </div>
         )}
       </div>
+
+      <AlertDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogMedia className="rounded-full bg-destructive/10 dark:bg-destructive/10">
+              <CircleAlertIcon className="size-5 text-destructive" />
+            </AlertDialogMedia>
+            <AlertDialogTitle>¿Eliminar este PDF?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Se eliminará{" "}
+              <span className="font-medium text-foreground">
+                &quot;{deleteTarget?.originalName}&quot;
+              </span>{" "}
+              junto con su código QR de forma permanente. Esta acción no se
+              puede deshacer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() => {
+                if (deleteTarget) void handleDelete(deleteTarget)
+                setDeleteTarget(null)
+              }}
+            >
+              Eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Dialog
         open={shareTarget !== null}
