@@ -1,6 +1,7 @@
 import { Geist_Mono, Inter, Raleway } from "next/font/google"
 
 import "@workspace/ui/globals.css"
+import { DotGridBackground } from "@/components/dot-grid-background"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@workspace/ui/components/sonner"
 import { cn } from "@workspace/ui/lib/utils"
@@ -30,6 +31,7 @@ export default function RootLayout({
     >
       <body>
         <ThemeProvider>
+          <DotGridBackground />
           {children}
           <Toaster richColors />
         </ThemeProvider>

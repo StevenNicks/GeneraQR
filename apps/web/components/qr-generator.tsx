@@ -9,6 +9,7 @@ import {
 } from "react"
 import {
   CircleAlertIcon,
+  CircleHelpIcon,
   FileWarningIcon,
   LinkIcon,
   QrCodeIcon,
@@ -48,9 +49,20 @@ import {
   Card,
   CardContent,
   CardDescription,
+  CardFooter,
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card"
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@workspace/ui/components/dialog"
 import {
   Drawer,
   DrawerClose,
@@ -75,6 +87,7 @@ import { toast } from "sonner"
 import { cn } from "@workspace/ui/lib/utils"
 
 import { FadeArc } from "@/components/fade-arc"
+import { useMediaQuery } from "@/hooks/use-media-query"
 
 type PdfRecord = {
   id: string
@@ -289,16 +302,16 @@ async function runUpload(
 function StackedCardsIllustration() {
   return (
     <div className="relative h-24 w-52" aria-hidden="true">
-      <div className="bg-muted/60 dark:bg-muted/30 border-border/50 absolute inset-x-6 top-0 h-6 rounded-t-lg border" />
-      <div className="bg-muted/80 dark:bg-muted/50 border-border/60 absolute inset-x-3 top-3 h-6 rounded-t-lg border" />
-      <div className="bg-background border-border absolute inset-x-0 top-6 flex h-16 items-center gap-3 rounded-lg border px-4 shadow-sm">
-        <div className="bg-muted size-8 shrink-0 rounded" />
+      <div className="absolute inset-x-6 top-0 h-6 rounded-t-lg border border-border/50 bg-muted/60 dark:bg-muted/30" />
+      <div className="absolute inset-x-3 top-3 h-6 rounded-t-lg border border-border/60 bg-muted/80 dark:bg-muted/50" />
+      <div className="absolute inset-x-0 top-6 flex h-16 items-center gap-3 rounded-lg border border-border bg-background px-4 shadow-sm">
+        <div className="size-8 shrink-0 rounded bg-muted" />
         <div className="flex flex-1 flex-col gap-1.5">
-          <div className="bg-muted h-2.5 w-3/4 rounded" />
-          <div className="bg-muted/60 h-2 w-1/2 rounded" />
+          <div className="h-2.5 w-3/4 rounded bg-muted" />
+          <div className="h-2 w-1/2 rounded bg-muted/60" />
         </div>
       </div>
-      <div className="from-background/0 via-background/60 to-background pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-linear-to-b" />
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-linear-to-b from-background/0 via-background/60 to-background" />
     </div>
   )
 }
@@ -419,6 +432,10 @@ export function QrGenerator() {
   const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([])
   const [isDraggingOver, setIsDraggingOver] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<PdfRecord | null>(null)
+  // Bottom sheet on phones, centered dialog from tablet up — matches
+  // Tailwind's own `sm` breakpoint so it lines up with the rest of the
+  // page's responsive classes.
+  const isDesktop = useMediaQuery("(min-width: 640px)")
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const pendingUploadsRef = useRef<PendingUpload[]>([])
@@ -671,146 +688,184 @@ export function QrGenerator() {
         </CardContent>
       </Card>
 
-      <div className="flex flex-col gap-4">
-        <h2 className="text-lg font-medium">PDFs guardados</h2>
+      <Card>
+        <CardHeader>
+          <CardTitle>PDFs guardados</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {listError ? (
+            <Alert variant="destructive">
+              <AlertTitle>Ocurrió un problema</AlertTitle>
+              <AlertDescription>{listError}</AlertDescription>
+            </Alert>
+          ) : isLoadingList ? (
+            <div className="flex flex-col gap-3">
+              <Skeleton className="h-16 w-full rounded-xl" />
+              <Skeleton className="h-16 w-full rounded-xl" />
+            </div>
+          ) : records.length === 0 ? (
+            <Empty className="py-12">
+              <EmptyHeader>
+                <EmptyMedia>
+                  <StackedCardsIllustration />
+                </EmptyMedia>
+                <EmptyTitle>Sin PDFs por ahora</EmptyTitle>
+                <EmptyDescription>
+                  Los archivos que subas arriba aparecerán aquí.
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
+          ) : (
+            <div className="flex flex-col gap-3">
+              {records.map((record) => {
+                // Bottom sheet on phones, centered dialog from tablet up —
+                // same content either way, just a different shell.
+                const Root = isDesktop ? Dialog : Drawer
+                const Trigger = isDesktop ? DialogTrigger : DrawerTrigger
+                const Content = isDesktop ? DialogContent : DrawerContent
+                const Header = isDesktop ? DialogHeader : DrawerHeader
+                const Title = isDesktop ? DialogTitle : DrawerTitle
+                const Description = isDesktop
+                  ? DialogDescription
+                  : DrawerDescription
+                const Footer = isDesktop ? DialogFooter : DrawerFooter
+                const Close = isDesktop ? DialogClose : DrawerClose
 
-        {listError ? (
-          <Alert variant="destructive">
-            <AlertTitle>Ocurrió un problema</AlertTitle>
-            <AlertDescription>{listError}</AlertDescription>
-          </Alert>
-        ) : isLoadingList ? (
-          <div className="flex flex-col gap-3">
-            <Skeleton className="h-16 w-full rounded-xl" />
-            <Skeleton className="h-16 w-full rounded-xl" />
-          </div>
-        ) : records.length === 0 ? (
-          <Empty className="py-12">
-            <EmptyHeader>
-              <EmptyMedia>
-                <StackedCardsIllustration />
-              </EmptyMedia>
-              <EmptyTitle>Sin PDFs por ahora</EmptyTitle>
-              <EmptyDescription>
-                Los archivos que subas arriba aparecerán aquí.
-              </EmptyDescription>
-            </EmptyHeader>
-          </Empty>
-        ) : (
-          <div className="flex flex-col gap-3">
-            {records.map((record) => (
-              <Drawer key={record.id} showSwipeHandle>
-                <Attachment state="done" className="w-full">
-                  <AttachmentMedia className="bg-secondary text-secondary-foreground">
-                    <PDF className="size-5" />
-                  </AttachmentMedia>
-                  <AttachmentContent>
-                    <AttachmentTitle title={record.originalName}>
-                      {truncateFileName(record.originalName)}
-                    </AttachmentTitle>
-                    <div className="flex min-w-0 items-center gap-1.5">
-                      <AttachmentDescription className="flex-1 truncate shrink-0">
-                        {formatSize(record.size)} ·{" "}
-                        {formatDate(record.createdAt)}
-                      </AttachmentDescription>
-                    </div>
-                  </AttachmentContent>
-                  <AttachmentActions>
-                    <AttachmentAction
-                      type="button"
-                      aria-label={`Eliminar ${record.originalName}`}
-                      disabled={deletingIds.has(record.id)}
-                      onClick={() => setDeleteTarget(record)}
-                    >
-                      {deletingIds.has(record.id) ? <FadeArc /> : <XIcon />}
-                    </AttachmentAction>
-                  </AttachmentActions>
-                  <DrawerTrigger
-                    render={
-                      <AttachmentTrigger
-                        aria-label={`Ver código QR de ${record.originalName}`}
-                      />
-                    }
-                  />
-                </Attachment>
-                <DrawerContent className="min-h-[75dvh]">
-                  <DrawerClose
-                    render={
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-sm"
-                        className="absolute top-3 right-3"
-                      />
-                    }
+                return (
+                  <Root
+                    key={record.id}
+                    {...(!isDesktop ? { showSwipeHandle: true } : {})}
                   >
-                    <XIcon />
-                    <span className="sr-only">Cerrar</span>
-                  </DrawerClose>
-                  <DrawerHeader>
-                    <DrawerTitle title={record.originalName} className="truncate">
-                      {truncateFileName(record.originalName, 30)}
-                    </DrawerTitle>
-                    <DrawerDescription>
-                      {formatSize(record.size)} · Subido el{" "}
-                      {formatDate(record.createdAt)}
-                    </DrawerDescription>
-                  </DrawerHeader>
-                  <div className="flex flex-1 flex-col items-center justify-center gap-2 py-6">
-                    <QrImage
-                      src={record.qrPath}
-                      alt={`Código QR de ${record.originalName}`}
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1.5 px-4 pb-4">
-                    <span className="text-xs font-medium text-muted-foreground">
-                      Enlace
-                    </span>
-                    <div className="flex items-center gap-1 rounded-lg border border-input bg-muted/40 py-1.5 pr-1.5 pl-3">
-                      <span className="flex-1 truncate text-xs text-muted-foreground">
-                        {`${window.location.origin}/r/${record.shortId}`}
-                      </span>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-sm"
-                        aria-label="Compartir enlace"
-                        onClick={() =>
-                          void shareRecordUrl(
-                            `${window.location.origin}/r/${record.shortId}`,
-                            record.originalName
-                          )
+                    <Attachment state="done" className="w-full">
+                      <AttachmentMedia className="bg-secondary text-secondary-foreground">
+                        <PDF className="size-5" />
+                      </AttachmentMedia>
+                      <AttachmentContent>
+                        <AttachmentTitle title={record.originalName}>
+                          {truncateFileName(record.originalName)}
+                        </AttachmentTitle>
+                        <div className="flex min-w-0 items-center gap-1.5">
+                          <AttachmentDescription className="flex-1 shrink-0 truncate">
+                            {formatSize(record.size)} ·{" "}
+                            {formatDate(record.createdAt)}
+                          </AttachmentDescription>
+                        </div>
+                      </AttachmentContent>
+                      <AttachmentActions>
+                        <AttachmentAction
+                          type="button"
+                          aria-label={`Eliminar ${record.originalName}`}
+                          disabled={deletingIds.has(record.id)}
+                          onClick={() => setDeleteTarget(record)}
+                        >
+                          {deletingIds.has(record.id) ? <FadeArc /> : <XIcon />}
+                        </AttachmentAction>
+                      </AttachmentActions>
+                      <Trigger
+                        render={
+                          <AttachmentTrigger
+                            aria-label={`Ver código QR de ${record.originalName}`}
+                          />
+                        }
+                      />
+                    </Attachment>
+                    <Content
+                      className={isDesktop ? undefined : "min-h-[75dvh]"}
+                      {...(isDesktop ? { showCloseButton: false } : {})}
+                    >
+                      <Close
+                        render={
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            className="absolute top-3 right-3"
+                          />
                         }
                       >
-                        <LinkIcon />
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-sm"
-                        aria-label="Compartir imagen del QR"
-                        onClick={() => void shareRecordQrImage(record)}
+                        <XIcon />
+                        <span className="sr-only">Cerrar</span>
+                      </Close>
+                      <Header>
+                        <Title title={record.originalName} className="truncate">
+                          {truncateFileName(record.originalName, 30)}
+                        </Title>
+                        <Description>
+                          {formatSize(record.size)} · Subido el{" "}
+                          {formatDate(record.createdAt)}
+                        </Description>
+                      </Header>
+                      <div
+                        className={cn(
+                          "flex flex-col items-center gap-2",
+                          isDesktop ? "py-2" : "flex-1 justify-center py-6"
+                        )}
                       >
-                        <QrCodeIcon />
-                      </Button>
-                    </div>
-                  </div>
-                  <DrawerFooter className="pb-6">
-                    <a
-                      href={record.pdfPath}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className={buttonVariants()}
-                    >
-                      Abrir PDF
-                    </a>
-                  </DrawerFooter>
-                </DrawerContent>
-              </Drawer>
-            ))}
-          </div>
-        )}
-      </div>
+                        <QrImage
+                          src={record.qrPath}
+                          alt={`Código QR de ${record.originalName}`}
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1.5 px-4 pb-4">
+                        <span className="text-xs font-medium text-muted-foreground">
+                          Enlace
+                        </span>
+                        <div className="flex items-center gap-1 rounded-lg border border-input bg-muted/40 py-1.5 pr-1.5 pl-3">
+                          <span className="flex-1 truncate text-xs text-muted-foreground">
+                            {`${window.location.origin}/r/${record.shortId}`}
+                          </span>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label="Compartir enlace"
+                            onClick={() =>
+                              void shareRecordUrl(
+                                `${window.location.origin}/r/${record.shortId}`,
+                                record.originalName
+                              )
+                            }
+                          >
+                            <LinkIcon />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label="Compartir imagen del QR"
+                            onClick={() => void shareRecordQrImage(record)}
+                          >
+                            <QrCodeIcon />
+                          </Button>
+                        </div>
+                      </div>
+                      <Footer className={isDesktop ? undefined : "pb-6"}>
+                        <a
+                          href={record.pdfPath}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className={buttonVariants()}
+                        >
+                          Abrir PDF
+                        </a>
+                      </Footer>
+                    </Content>
+                  </Root>
+                )
+              })}
+            </div>
+          )}
+        </CardContent>
+        <CardFooter className="justify-end">
+          <a
+            href="mailto:stevealvaradopaez@gmail.com?subject=Ayuda%20con%20GeneraQR"
+            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <CircleHelpIcon className="size-4" />
+            Ayuda
+          </a>
+        </CardFooter>
+      </Card>
 
       <AlertDialog
         open={deleteTarget !== null}
@@ -847,7 +902,6 @@ export function QrGenerator() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
     </div>
   )
 }

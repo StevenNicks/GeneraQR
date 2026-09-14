@@ -7,6 +7,12 @@ const MARGIN = 2
 // Corner radius of a module, as a fraction of its 1x1 cell.
 const CORNER_RADIUS = 0.5
 
+// Concave (inner-bend) fillets stay smaller than the convex radius: two of
+// them can appear on the same 1-unit edge, and at the full radius their arcs
+// overlap and self-intersect the path, punching tiny stray holes in dense
+// areas of the code.
+const CONCAVE_RADIUS = 0.32
+
 function isFinderModule(row: number, col: number, size: number): boolean {
   const inTopLeft = row < 7 && col < 7
   const inTopRight = row < 7 && col >= size - 7
@@ -14,27 +20,37 @@ function isFinderModule(row: number, col: number, size: number): boolean {
   return inTopLeft || inTopRight || inBottomLeft
 }
 
-type Corners = { tl: boolean; tr: boolean; br: boolean; bl: boolean }
+// 0 = sharp (an edge continues straight through this corner), 1 = convex
+// round (an outer tip, no same-color neighbor on either side), -1 = concave
+// round (an inner bend of an L, both sides have a same-color neighbor but
+// the diagonal between them doesn't, leaving a sharp notch to smooth over).
+type CornerKind = 0 | 1 | -1
+type Corners = { tl: CornerKind; tr: CornerKind; br: CornerKind; bl: CornerKind }
 
-// Path for one module's 1x1 cell, rounding only the corners flagged `true`
-// in `corners`. A corner is left square (not rounded) when a same-color
-// orthogonal neighbor continues through it, so a run of adjacent modules
-// draws as one seamless blob instead of a chain of separate rounded
-// squares — the fluid look of most modern styled QR codes.
+// Path for one module's 1x1 cell. Convex corners are rounded inward (cut
+// off) so a run of adjacent modules draws as one seamless blob instead of a
+// chain of separate rounded squares; concave corners are filleted outward
+// (bulged past the grid point, into the touching module's territory) so an
+// L-shaped bend curves smoothly too, instead of leaving a sharp inner point
+// — same radius, opposite SVG sweep flag, so both read as one continuous
+// curve — the fluid look of most modern styled QR codes.
 function moduleClockwisePath(x: number, y: number, s: number, corners: Corners): string {
-  const rtl = corners.tl ? CORNER_RADIUS : 0
-  const rtr = corners.tr ? CORNER_RADIUS : 0
-  const rbr = corners.br ? CORNER_RADIUS : 0
-  const rbl = corners.bl ? CORNER_RADIUS : 0
+  const radius = (kind: CornerKind) =>
+    kind === 1 ? CORNER_RADIUS : kind === -1 ? CONCAVE_RADIUS : 0
+  const sweep = (kind: CornerKind) => (kind === -1 ? 0 : 1)
+  const rtl = radius(corners.tl)
+  const rtr = radius(corners.tr)
+  const rbr = radius(corners.br)
+  const rbl = radius(corners.bl)
 
   const p = [`M ${x + rtl} ${y}`, `L ${x + s - rtr} ${y}`]
-  if (rtr) p.push(`A ${rtr} ${rtr} 0 0 1 ${x + s} ${y + rtr}`)
+  if (rtr) p.push(`A ${rtr} ${rtr} 0 0 ${sweep(corners.tr)} ${x + s} ${y + rtr}`)
   p.push(`L ${x + s} ${y + s - rbr}`)
-  if (rbr) p.push(`A ${rbr} ${rbr} 0 0 1 ${x + s - rbr} ${y + s}`)
+  if (rbr) p.push(`A ${rbr} ${rbr} 0 0 ${sweep(corners.br)} ${x + s - rbr} ${y + s}`)
   p.push(`L ${x + rbl} ${y + s}`)
-  if (rbl) p.push(`A ${rbl} ${rbl} 0 0 1 ${x} ${y + s - rbl}`)
+  if (rbl) p.push(`A ${rbl} ${rbl} 0 0 ${sweep(corners.bl)} ${x} ${y + s - rbl}`)
   p.push(`L ${x} ${y + rtl}`)
-  if (rtl) p.push(`A ${rtl} ${rtl} 0 0 1 ${x + rtl} ${y}`)
+  if (rtl) p.push(`A ${rtl} ${rtl} 0 0 ${sweep(corners.tl)} ${x + rtl} ${y}`)
   p.push("Z")
   return p.join(" ")
 }
@@ -68,11 +84,20 @@ function buildQrSvg(data: string): string {
       const bottom = isDark(row + 1, col)
       const left = isDark(row, col - 1)
       const right = isDark(row, col + 1)
+      const topLeft = isDark(row - 1, col - 1)
+      const topRight = isDark(row - 1, col + 1)
+      const bottomLeft = isDark(row + 1, col - 1)
+      const bottomRight = isDark(row + 1, col + 1)
+      const cornerKind = (a: boolean, b: boolean, diagonal: boolean): CornerKind => {
+        if (!a && !b) return 1
+        if (a && b && !diagonal) return -1
+        return 0
+      }
       const corners: Corners = {
-        tl: !(top || left),
-        tr: !(top || right),
-        br: !(bottom || right),
-        bl: !(bottom || left),
+        tl: cornerKind(top, left, topLeft),
+        tr: cornerKind(top, right, topRight),
+        br: cornerKind(bottom, right, bottomRight),
+        bl: cornerKind(bottom, left, bottomLeft),
       }
       modulePaths.push(
         moduleClockwisePath(col + MARGIN, row + MARGIN, 1, corners)
