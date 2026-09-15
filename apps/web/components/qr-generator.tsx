@@ -717,7 +717,7 @@ export function QrGenerator() {
           </div>
 
           {pendingUploads.length > 0 ? (
-            <ScrollArea className="-mr-3 max-h-[58px] pr-3">
+            <ScrollArea className="-mr-3 max-h-[62px] pr-3">
               <div className="flex flex-col gap-4 p-0.5">
                 {pendingUploads.map((upload) => {
                   return (
