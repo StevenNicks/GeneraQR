@@ -13,14 +13,12 @@ import {
   CircleHelpIcon,
   FileWarningIcon,
   LinkIcon,
-  MoonIcon,
   QrCodeIcon,
   RefreshCwIcon,
-  SunIcon,
+  SearchIcon,
   Trash2Icon,
   XIcon,
 } from "lucide-react"
-import { useTheme } from "next-themes"
 
 import { PDF } from "@react-symbols/icons/files"
 import {
@@ -52,7 +50,6 @@ import {
 import { Button, buttonVariants } from "@workspace/ui/components/button"
 import {
   Card,
-  CardAction,
   CardContent,
   CardDescription,
   CardFooter,
@@ -87,6 +84,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@workspace/ui/components/empty"
+import { Input } from "@workspace/ui/components/input"
 import { ScrollArea } from "@workspace/ui/components/scroll-area"
 import { Skeleton } from "@workspace/ui/components/skeleton"
 import { Spinner } from "@workspace/ui/components/spinner"
@@ -438,20 +436,29 @@ export function QrGenerator() {
   const [deleteTarget, setDeleteTarget] = useState<PdfRecord | null>(null)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState("")
   // Bottom sheet on phones, centered dialog from tablet up — matches
   // Tailwind's own `sm` breakpoint so it lines up with the rest of the
   // page's responsive classes.
   const isDesktop = useMediaQuery("(min-width: 640px)")
 
-  const { resolvedTheme, setTheme } = useTheme()
-  // The server has no way to know the visitor's theme, so resolvedTheme is
-  // undefined until the client mounts — render a neutral icon until then to
-  // avoid a hydration mismatch.
-  const [mounted, setMounted] = useState(false)
-  useEffect(() => setMounted(true), [])
-
   const fileInputRef = useRef<HTMLInputElement>(null)
   const pendingUploadsRef = useRef<PendingUpload[]>([])
+  const searchInputRef = useRef<HTMLInputElement>(null)
+
+  // Cmd/Ctrl+F jumps straight to the search field (matches the ⌘F hint
+  // shown next to it), taking over the browser's own "find in page" since
+  // this list is the thing worth searching on this page.
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "f") {
+        event.preventDefault()
+        searchInputRef.current?.focus()
+      }
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [])
 
   useEffect(() => {
     fetch("/api/pdfs")
@@ -617,8 +624,19 @@ export function QrGenerator() {
     }
   }
 
+  const isBulkDeleting = Array.from(selectedIds).some((id) =>
+    deletingIds.has(id)
+  )
+  const filteredRecords = searchQuery.trim()
+    ? records.filter((record) =>
+        record.originalName
+          .toLowerCase()
+          .includes(searchQuery.trim().toLowerCase())
+      )
+    : records
+
   return (
-    <div className="mx-auto flex h-dvh w-full max-w-2xl flex-col gap-6 overflow-hidden p-4 sm:gap-8 sm:p-6">
+    <div className="mx-auto flex h-dvh w-full max-w-2xl flex-col gap-3 overflow-hidden p-4 sm:p-6">
       <Card className="shrink-0">
         <CardHeader>
           <div className="flex items-start gap-3">
@@ -632,41 +650,8 @@ export function QrGenerator() {
               </CardDescription>
             </div>
           </div>
-          <CardAction>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              className="relative"
-              aria-label={
-                mounted && resolvedTheme === "dark"
-                  ? "Cambiar a tema claro"
-                  : "Cambiar a tema oscuro"
-              }
-              onClick={() =>
-                setTheme(resolvedTheme === "dark" ? "light" : "dark")
-              }
-            >
-              <SunIcon
-                className={cn(
-                  "size-4 transition-all duration-500",
-                  mounted && resolvedTheme === "dark"
-                    ? "scale-100 rotate-0 opacity-100"
-                    : "scale-0 rotate-90 opacity-0"
-                )}
-              />
-              <MoonIcon
-                className={cn(
-                  "absolute size-4 transition-all duration-500",
-                  mounted && resolvedTheme === "dark"
-                    ? "scale-0 -rotate-90 opacity-0"
-                    : "scale-100 rotate-0 opacity-100"
-                )}
-              />
-            </Button>
-          </CardAction>
         </CardHeader>
-        <CardContent className="flex flex-col gap-4">
+        <CardContent className="flex flex-col gap-3">
           <div
             onDragOver={(event) => {
               event.preventDefault()
@@ -681,14 +666,14 @@ export function QrGenerator() {
           >
             <Empty
               className={cn(
-                "border border-dashed transition-colors",
+                "gap-3 border border-dashed py-4 transition-colors",
                 isDraggingOver &&
                   "border-green-600 bg-green-600/5 dark:border-green-400 dark:bg-green-400/5"
               )}
             >
-              <EmptyHeader>
+              <EmptyHeader className="gap-1.5">
                 <EmptyMedia>
-                  <PDF className="size-10" />
+                  <PDF className="size-8" />
                 </EmptyMedia>
                 <EmptyTitle>Elige tus archivos o arrástralos aquí</EmptyTitle>
               </EmptyHeader>
@@ -788,8 +773,8 @@ export function QrGenerator() {
         </CardContent>
       </Card>
 
-      <Card className="min-h-0">
-        <CardHeader className="shrink-0">
+      <Card className="min-h-0 py-0">
+        <CardHeader className="shrink-0 border-b py-2 pb-2!">
           {selectedIds.size > 0 ? (
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-1">
@@ -798,6 +783,7 @@ export function QrGenerator() {
                   variant="ghost"
                   size="icon-sm"
                   aria-label="Cancelar selección"
+                  disabled={isBulkDeleting}
                   onClick={() => setSelectedIds(new Set())}
                 >
                   <XIcon />
@@ -811,14 +797,41 @@ export function QrGenerator() {
                 type="button"
                 variant="destructive"
                 size="sm"
+                disabled={isBulkDeleting}
                 onClick={() => setBulkDeleteOpen(true)}
               >
-                <Trash2Icon />
+                {isBulkDeleting ? <FadeArc /> : <Trash2Icon />}
                 Eliminar
               </Button>
             </div>
           ) : (
-            <CardTitle>PDFs guardados</CardTitle>
+            <div className="flex h-7 items-center gap-2">
+              <SearchIcon className="size-4 shrink-0 text-muted-foreground" />
+              <Input
+                ref={searchInputRef}
+                type="text"
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Buscar PDFs..."
+                aria-label="Buscar PDFs guardados"
+                className="h-full flex-1 border-0 bg-transparent p-0 shadow-none focus-visible:ring-0 dark:bg-transparent"
+              />
+              {searchQuery ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="Limpiar búsqueda"
+                  onClick={() => setSearchQuery("")}
+                >
+                  <XIcon />
+                </Button>
+              ) : (
+                <kbd className="hidden shrink-0 items-center gap-0.5 rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground sm:inline-flex">
+                  ⌘F
+                </kbd>
+              )}
+            </div>
           )}
         </CardHeader>
         <CardContent className="flex min-h-0 flex-1 flex-col">
@@ -844,10 +857,32 @@ export function QrGenerator() {
                 </EmptyDescription>
               </EmptyHeader>
             </Empty>
+          ) : filteredRecords.length === 0 ? (
+            <Empty className="py-12">
+              <EmptyHeader>
+                <EmptyMedia>
+                  <SearchIcon className="size-10" />
+                </EmptyMedia>
+                <EmptyTitle>Sin resultados</EmptyTitle>
+                <EmptyDescription>
+                  Ningún PDF coincide con &quot;{searchQuery.trim()}&quot;.
+                </EmptyDescription>
+              </EmptyHeader>
+              <EmptyContent>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSearchQuery("")}
+                >
+                  Limpiar búsqueda
+                </Button>
+              </EmptyContent>
+            </Empty>
           ) : (
             <ScrollArea className="-mr-3 min-h-0 flex-1 pr-3">
-              <div className="flex flex-col gap-3 p-0.5">
-                {records.map((record) => {
+              <div className="flex flex-col gap-1 p-0.5">
+                {filteredRecords.map((record) => {
                   // Bottom sheet on phones, centered dialog from tablet up —
                   // same content either way, just a different shell.
                   const Root = isDesktop ? Dialog : Drawer
@@ -863,6 +898,7 @@ export function QrGenerator() {
 
                   const isSelected = selectedIds.has(record.id)
                   const isSelectionMode = selectedIds.size > 0
+                  const isDeleting = deletingIds.has(record.id)
 
                   return (
                     <Root
@@ -879,7 +915,7 @@ export function QrGenerator() {
                         <div className="relative z-20 shrink-0">
                           <AttachmentMedia
                             role="button"
-                            tabIndex={0}
+                            tabIndex={isDeleting ? -1 : 0}
                             aria-pressed={isSelected}
                             aria-label={
                               isSelected
@@ -887,15 +923,19 @@ export function QrGenerator() {
                                 : `Seleccionar ${record.originalName}`
                             }
                             className={cn(
-                              "cursor-pointer bg-secondary text-secondary-foreground transition-opacity",
-                              isSelected && "opacity-50"
+                              "bg-secondary text-secondary-foreground transition-opacity",
+                              isDeleting ? "cursor-default" : "cursor-pointer",
+                              isSelected && !isDeleting && "opacity-50"
                             )}
                             onClick={(event) => {
                               event.stopPropagation()
-                              toggleSelected(record.id)
+                              if (!isDeleting) toggleSelected(record.id)
                             }}
                             onKeyDown={(event) => {
-                              if (event.key === "Enter" || event.key === " ") {
+                              if (
+                                !isDeleting &&
+                                (event.key === "Enter" || event.key === " ")
+                              ) {
                                 event.preventDefault()
                                 toggleSelected(record.id)
                               }
@@ -939,7 +979,8 @@ export function QrGenerator() {
                         {isSelectionMode ? (
                           <button
                             type="button"
-                            className="absolute inset-0 z-10 outline-none"
+                            disabled={isDeleting}
+                            className="absolute inset-0 z-10 outline-none disabled:pointer-events-none"
                             aria-label={
                               isSelected
                                 ? `Deseleccionar ${record.originalName}`
@@ -1048,7 +1089,14 @@ export function QrGenerator() {
             </ScrollArea>
           )}
         </CardContent>
-        <CardFooter className="shrink-0 justify-end">
+        <CardFooter className="shrink-0 justify-between">
+          {!isLoadingList && !listError ? (
+            <span className="text-sm text-muted-foreground">
+              {records.length} {records.length === 1 ? "PDF" : "PDFs"}
+            </span>
+          ) : (
+            <span />
+          )}
           <a
             href="mailto:stevealvaradopaez@gmail.com?subject=Ayuda%20con%20GeneraQR"
             className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
